@@ -1,3 +1,4 @@
+http://web.stanford.edu/~ouster/cgi-bin/cs140-spring18/problemSet0.php
 This package contains cs140 ps0 starter code. The included Makefile
 will compile your solutions to the caltrain and reaction synchronisation
 problems. The resulting binaries will try to stress-test what you
