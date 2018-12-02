@@ -11,9 +11,9 @@ reaction: reaction-runner.c reaction.c pintos_thread.h
 	$(CC) $(CFLAGS) -o reaction reaction-runner.c -lpthread 
 
 run: caltrain reaction
-	./caltrain
-	./caltrain
-	./caltrain
+	# ./caltrain
+	# ./caltrain
+	# ./caltrain
 	./reaction 0
 	./reaction 0
 	./reaction 20
