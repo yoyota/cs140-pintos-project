@@ -5,4 +5,4 @@ jobs:
       - image: circleci/buildpack-deps
     steps:
       - checkout
-      - run: cd ps0 && pwd && make run
+      - run: cd ps0 && make run
