@@ -1,6 +1,6 @@
 version: 2
 jobs:
-  test-ps0:
+  build:
     docker:
       - image: circleci/buildpack-deps
     steps:
