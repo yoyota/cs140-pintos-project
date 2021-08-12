@@ -14,18 +14,18 @@ run: caltrain reaction
 	./caltrain
 	./caltrain
 	./caltrain
-	./reaction 0
-	./reaction 0
-	./reaction 20
-	./reaction 20
-	./reaction 40
-	./reaction 40
-	./reaction 60
-	./reaction 60
-	./reaction 80
-	./reaction 80
-	./reaction 100
-	./reaction 100
+	# ./reaction 0
+	# ./reaction 0
+	# ./reaction 20
+	# ./reaction 20
+	# ./reaction 40
+	# ./reaction 40
+	# ./reaction 60
+	# ./reaction 60
+	# ./reaction 80
+	# ./reaction 80
+	# ./reaction 100
+	# ./reaction 100
 
 clean:
 	$(RM) caltrain reaction
