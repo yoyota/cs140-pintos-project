@@ -99,12 +99,11 @@ static void add_timer(int64_t ticks)
    be turned on. */
 void timer_sleep(int64_t ticks)
 {
-	int64_t start = timer_ticks();
-
-	ASSERT(intr_get_level() == INTR_ON);
 	add_timer(ticks);
-	while (timer_elapsed(start) < ticks)
-		thread_yield();
+	ASSERT(intr_get_level() == INTR_ON);
+	enum intr_level old_level = intr_disable();
+	thread_block();
+	intr_set_level(old_level);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -170,9 +169,26 @@ void timer_print_stats(void)
 	printf("Timer: %" PRId64 " ticks\n", timer_ticks());
 }
 
+static void expire_timers()
+{
+	int64_t tick = timer_ticks();
+	struct list_elem *e;
+	for (e = list_begin(&timer_list); e != list_end(&timer_list);
+	     e = list_next(e)) {
+		struct timer *t = list_entry(e, struct timer, elem);
+		if (tick > t->expires) {
+			thread_unblock(t->thread);
+			list_remove(&t->elem);
+			// TODO can not free on interrupt context
+			// free(t);
+		}
+	}
+}
+
 /* Timer interrupt handler. */
 static void timer_interrupt(struct intr_frame *args UNUSED)
 {
+	expire_timers();
 	ticks++;
 	thread_tick();
 }
