@@ -24,6 +24,8 @@ static int64_t ticks;
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
 
+static struct list timer_list;
+
 static intr_handler_func timer_interrupt;
 static bool too_many_loops(unsigned loops);
 static void busy_wait(int64_t loops);
@@ -36,6 +38,7 @@ void timer_init(void)
 {
 	pit_configure_channel(0, 2, TIMER_FREQ);
 	intr_register_ext(0x20, timer_interrupt, "8254 Timer");
+	list_init(&timer_list);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -81,6 +84,17 @@ int64_t timer_elapsed(int64_t then)
 	return timer_ticks() - then;
 }
 
+static void add_timer(int64_t ticks)
+{
+	int64_t start = timer_ticks();
+	struct timer *timer = malloc(sizeof *timer);
+	if (timer == NULL)
+		PANIC("Failed to allocate memory for timer");
+	timer->thread = thread_current();
+	timer->expires = start + ticks;
+	list_push_back(&timer_list, &timer->elem);
+}
+
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void timer_sleep(int64_t ticks)
@@ -88,6 +102,7 @@ void timer_sleep(int64_t ticks)
 	int64_t start = timer_ticks();
 
 	ASSERT(intr_get_level() == INTR_ON);
+	add_timer(ticks);
 	while (timer_elapsed(start) < ticks)
 		thread_yield();
 }
