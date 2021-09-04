@@ -7,7 +7,7 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
-#include "threads/palloc.h"
+#include "threads/malloc.h"
 
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -85,27 +85,28 @@ int64_t timer_elapsed(int64_t then)
 	return timer_ticks() - then;
 }
 
-static void add_timer(int64_t ticks)
+static struct timer *add_timer(int64_t ticks)
 {
 	int64_t start = timer_ticks();
-	struct timer *timer = palloc_get_page(PAL_ZERO);
-	memset(timer, 0, sizeof *timer);
+	struct timer *timer = malloc(sizeof *timer);
 	if (timer == NULL)
 		PANIC("Failed to allocate memory for timer");
 	timer->thread = thread_current();
 	timer->expires = start + ticks;
 	list_push_back(&timer_list, &timer->elem);
+	return timer;
 }
 
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void timer_sleep(int64_t ticks)
 {
-	add_timer(ticks);
+	struct timer *t = add_timer(ticks);
 	ASSERT(intr_get_level() == INTR_ON);
 	enum intr_level old_level = intr_disable();
 	thread_block();
 	intr_set_level(old_level);
+	free(t);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -181,7 +182,6 @@ static void run_timers()
 		if (tick >= t->expires) {
 			thread_unblock(t->thread);
 			list_remove(&t->elem);
-			palloc_free_page(t);
 		}
 	}
 }
