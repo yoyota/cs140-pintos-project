@@ -176,7 +176,7 @@ static void expire_timers()
 	for (e = list_begin(&timer_list); e != list_end(&timer_list);
 	     e = list_next(e)) {
 		struct timer *t = list_entry(e, struct timer, elem);
-		if (tick > t->expires) {
+		if (tick >= t->expires) {
 			thread_unblock(t->thread);
 			list_remove(&t->elem);
 			// TODO can not free on interrupt context
@@ -188,9 +188,9 @@ static void expire_timers()
 /* Timer interrupt handler. */
 static void timer_interrupt(struct intr_frame *args UNUSED)
 {
-	expire_timers();
 	ticks++;
 	thread_tick();
+	expire_timers();
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
