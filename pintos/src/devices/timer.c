@@ -7,6 +7,7 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "threads/palloc.h"
 
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -87,7 +88,8 @@ int64_t timer_elapsed(int64_t then)
 static void add_timer(int64_t ticks)
 {
 	int64_t start = timer_ticks();
-	struct timer *timer = malloc(sizeof *timer);
+	struct timer *timer = palloc_get_page(PAL_ZERO);
+	memset(timer, 0, sizeof *timer);
 	if (timer == NULL)
 		PANIC("Failed to allocate memory for timer");
 	timer->thread = thread_current();
@@ -172,15 +174,14 @@ void timer_print_stats(void)
 static void expire_timers()
 {
 	int64_t tick = timer_ticks();
-	struct list_elem *e;
-	for (e = list_begin(&timer_list); e != list_end(&timer_list);
-	     e = list_next(e)) {
+	struct list_elem *e = list_begin(&timer_list);
+	while (e != list_end(&timer_list)) {
 		struct timer *t = list_entry(e, struct timer, elem);
+		e = list_next(e);
 		if (tick >= t->expires) {
 			thread_unblock(t->thread);
 			list_remove(&t->elem);
-			// TODO can not free on interrupt context
-			// free(t);
+			palloc_free_page(t);
 		}
 	}
 }
