@@ -171,7 +171,7 @@ void timer_print_stats(void)
 	printf("Timer: %" PRId64 " ticks\n", timer_ticks());
 }
 
-static void expire_timers()
+static void run_timers()
 {
 	int64_t tick = timer_ticks();
 	struct list_elem *e = list_begin(&timer_list);
@@ -191,7 +191,7 @@ static void timer_interrupt(struct intr_frame *args UNUSED)
 {
 	ticks++;
 	thread_tick();
-	expire_timers();
+	run_timers();
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
