@@ -1,4 +1,6 @@
+#include "devices/timer.h"
 #include "threads/thread.h"
+#include "threads/fixed-point.h"
 #include <debug.h>
 #include <stddef.h>
 #include <random.h>
@@ -48,6 +50,9 @@ struct kernel_thread_frame {
 static long long idle_ticks; /* # of timer ticks spent idle. */
 static long long kernel_ticks; /* # of timer ticks in kernel threads. */
 static long long user_ticks; /* # of timer ticks in user programs. */
+
+/* priority */
+int load_avg;
 
 /* Scheduling. */
 #define TIME_SLICE 4 /* # of timer ticks to give each thread. */
@@ -136,6 +141,14 @@ void thread_tick(void)
 	/* Enforce preemption. */
 	if (++thread_ticks >= TIME_SLICE)
 		intr_yield_on_return();
+}
+
+void system_load_avg(void)
+{
+	if (timer_ticks() % TIMER_FREQ == 0) {
+		//  (59/60)*load_avg + (1/60)*ready_threads,
+		int coefficient = ff_divide(itof(59), itof(60)); // 16110
+	}
 }
 
 /* Prints thread statistics. */
@@ -355,8 +368,10 @@ int thread_get_nice(void)
 /* Returns 100 times the system load average. */
 int thread_get_load_avg(void)
 {
-	/* Not yet implemented. */
-	return 0;
+	enum intr_level old_level = intr_disable();
+	int l = load_avg;
+	intr_set_level(old_level);
+	return l;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
