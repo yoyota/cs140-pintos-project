@@ -1,7 +1,6 @@
-// q = 14 and f = 2 << 14
-#define Q 14
-#define F (1 << Q)
-#define itof(n) (n * F)
-#define ftoi(f) (f / F)
-#define ff_div(x, y) ((int64_t)x * F / y)
-#define ff_mul(x, y) ((int64_t)x * y / F)
+// p = 17, q = 14 and f = 1 << 14
+int scaling_factor = (1 << 14);
+#define itof(n) (n * scaling_factor)
+#define ftoi(f) (f / scaling_factor)
+#define ff_div(x, y) ((int64_t)x * scaling_factor / y)
+#define ff_mul(x, y) ((int64_t)x * y / scaling_factor)
