@@ -4,3 +4,4 @@
 #define itof(n) (n * F)
 #define ftoi(f) (f / F)
 #define ff_div(x, y) ((int64_t)x * F / y)
+#define ff_mul(x, y) ((int64_t)x * y / F)
