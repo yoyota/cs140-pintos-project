@@ -143,6 +143,21 @@ void thread_tick(void)
 		intr_yield_on_return();
 }
 
+int get_ready_threads()
+{
+	int i;
+	int ready_threads = 0;
+	for (i = 0; i < PRI_MAX + 1; i++) {
+		int t = list_size(&ready_list[i]);
+		ready_threads += t;
+	}
+	struct thread *cur = thread_current();
+	if (cur != idle_thread) {
+		ready_threads += 1;
+	}
+	return ready_threads;
+}
+
 void system_load_avg(void)
 {
 	if (timer_ticks() % TIMER_FREQ == 0) {
