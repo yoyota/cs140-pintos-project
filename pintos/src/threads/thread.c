@@ -158,12 +158,17 @@ int get_ready_threads()
 	return ready_threads;
 }
 
+// load_vag = (59/60)*load_avg + (1/60)*ready_threads
 void system_load_avg(void)
 {
-	if (timer_ticks() % TIMER_FREQ == 0) {
-		//  (59/60)*load_avg + (1/60)*ready_threads,
-		int coefficient = ff_divide(itof(59), itof(60)); // 16110
+	if (timer_ticks() % TIMER_FREQ != 0) {
+		return;
 	}
+	int decay_rate = ff_div(itof(59), itof(60)); // 16110
+	int coefficient = ff_div(itof(1), itof(60)); // 273
+	int ready_threads = get_ready_threads();
+	load_avg = ff_mul(decay_rate, load_avg);
+	load_avg += coefficient * ready_threads;
 }
 
 /* Prints thread statistics. */
@@ -384,7 +389,7 @@ int thread_get_nice(void)
 int thread_get_load_avg(void)
 {
 	enum intr_level old_level = intr_disable();
-	int l = load_avg;
+	int l = ftoi(100 * load_avg);
 	intr_set_level(old_level);
 	return l;
 }
