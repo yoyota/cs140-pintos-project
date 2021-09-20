@@ -146,12 +146,19 @@ void thread_tick(void)
 }
 
 // load_vag = (59/60)*load_avg + (1/60)*ready_threads
+int get_running_thread_count()
+{
+	if (thread_current() == idle_thread) {
+		return 0;
+	}
+	return 1;
+}
 void system_load_avg(void)
 {
 	int decay_rate = 16110; // 59 / 60
 	int coefficient = 273; // 1 / 60
 	load_avg = ff_mul(decay_rate, load_avg);
-	load_avg += coefficient * ready_threads;
+	load_avg += coefficient * (ready_threads + get_running_thread_count());
 }
 
 /* Prints thread statistics. */
