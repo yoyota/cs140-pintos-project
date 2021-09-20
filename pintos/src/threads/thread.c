@@ -25,6 +25,7 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list[PRI_MAX + 1];
+int ready_list_size;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -53,7 +54,6 @@ static long long user_ticks; /* # of timer ticks in user programs. */
 
 /* priority */
 int load_avg;
-int ready_threads;
 
 /* Scheduling. */
 #define TIME_SLICE 4 /* # of timer ticks to give each thread. */
@@ -95,7 +95,7 @@ void thread_init(void)
 
 	lock_init(&tid_lock);
 	list_init(&all_list);
-	ready_threads = 0;
+	ready_list_size = 0;
 	int i;
 	for (i = 0; i < PRI_MAX + 1; i++) {
 		list_init(&ready_list[i]);
@@ -158,7 +158,8 @@ void system_load_avg(void)
 	int decay_rate = 16110; // 59 / 60
 	int coefficient = 273; // 1 / 60
 	load_avg = ff_mul(decay_rate, load_avg);
-	load_avg += coefficient * (ready_threads + get_running_thread_count());
+	load_avg +=
+		coefficient * (ready_list_size + get_running_thread_count());
 }
 
 /* Prints thread statistics. */
@@ -264,7 +265,7 @@ void thread_unblock(struct thread *t)
 	old_level = intr_disable();
 	ASSERT(t->status == THREAD_BLOCKED);
 
-	ready_threads++;
+	ready_list_size++;
 	list_push_back(&ready_list[t->priority], &t->elem);
 	t->status = THREAD_READY;
 	intr_set_level(old_level);
@@ -331,7 +332,7 @@ void thread_yield(void)
 
 	old_level = intr_disable();
 	if (cur != idle_thread) {
-		ready_threads++;
+		ready_list_size++;
 		list_push_back(&ready_list[cur->priority], &cur->elem);
 	}
 	cur->status = THREAD_READY;
@@ -499,7 +500,7 @@ static struct thread *next_thread_to_run(void)
 	int i;
 	for (i = PRI_MAX; i >= 0; i--) {
 		if (!list_empty(&ready_list[i])) {
-			ready_threads--;
+			ready_list_size--;
 			return list_entry(list_pop_front(&ready_list[i]),
 					  struct thread, elem);
 		}
