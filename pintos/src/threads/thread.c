@@ -53,6 +53,7 @@ static long long user_ticks; /* # of timer ticks in user programs. */
 
 /* priority */
 int load_avg;
+int ready_threads;
 
 /* Scheduling. */
 #define TIME_SLICE 4 /* # of timer ticks to give each thread. */
@@ -94,6 +95,7 @@ void thread_init(void)
 
 	lock_init(&tid_lock);
 	list_init(&all_list);
+	ready_threads = 0;
 	int i;
 	for (i = 0; i < PRI_MAX + 1; i++) {
 		list_init(&ready_list[i]);
@@ -143,21 +145,6 @@ void thread_tick(void)
 		intr_yield_on_return();
 }
 
-int get_ready_threads()
-{
-	int i;
-	int ready_threads = 0;
-	for (i = 0; i < PRI_MAX + 1; i++) {
-		int t = list_size(&ready_list[i]);
-		ready_threads += t;
-	}
-	struct thread *cur = thread_current();
-	if (cur != idle_thread) {
-		ready_threads += 1;
-	}
-	return ready_threads;
-}
-
 // load_vag = (59/60)*load_avg + (1/60)*ready_threads
 void system_load_avg(void)
 {
@@ -166,7 +153,6 @@ void system_load_avg(void)
 	}
 	int decay_rate = 16110; // 59 / 60
 	int coefficient = 273; // 1 / 60
-	int ready_threads = get_ready_threads();
 	load_avg = ff_mul(decay_rate, load_avg);
 	load_avg += coefficient * ready_threads;
 }
@@ -273,6 +259,8 @@ void thread_unblock(struct thread *t)
 
 	old_level = intr_disable();
 	ASSERT(t->status == THREAD_BLOCKED);
+
+	ready_threads++;
 	list_push_back(&ready_list[t->priority], &t->elem);
 	t->status = THREAD_READY;
 	intr_set_level(old_level);
@@ -338,8 +326,10 @@ void thread_yield(void)
 	ASSERT(!intr_context());
 
 	old_level = intr_disable();
-	if (cur != idle_thread)
+	if (cur != idle_thread) {
+		ready_threads++;
 		list_push_back(&ready_list[cur->priority], &cur->elem);
+	}
 	cur->status = THREAD_READY;
 	schedule();
 	intr_set_level(old_level);
@@ -504,9 +494,11 @@ static struct thread *next_thread_to_run(void)
 {
 	int i;
 	for (i = PRI_MAX; i >= 0; i--) {
-		if (!list_empty(&ready_list[i]))
+		if (!list_empty(&ready_list[i])) {
+			ready_threads--;
 			return list_entry(list_pop_front(&ready_list[i]),
 					  struct thread, elem);
+		}
 	}
 	return idle_thread;
 }
