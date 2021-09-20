@@ -148,9 +148,6 @@ void thread_tick(void)
 // load_vag = (59/60)*load_avg + (1/60)*ready_threads
 void system_load_avg(void)
 {
-	if (timer_ticks() % TIMER_FREQ != 0) {
-		return;
-	}
 	int decay_rate = 16110; // 59 / 60
 	int coefficient = 273; // 1 / 60
 	load_avg = ff_mul(decay_rate, load_avg);
