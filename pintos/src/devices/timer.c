@@ -200,8 +200,11 @@ static void timer_interrupt(struct intr_frame *args UNUSED)
 	ticks++;
 	thread_tick();
 	run_timers();
-	if (ticks % TIMER_FREQ == 0) {
-		system_load_avg();
+	if (thread_mlfqs) {
+		recent_cpu_increase();
+		if (ticks % TIMER_FREQ == 0) {
+			system_load_avg();
+		}
 	}
 }
 

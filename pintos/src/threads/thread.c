@@ -153,6 +153,15 @@ int get_running_thread_count()
 	}
 	return 1;
 }
+
+void recent_cpu_increase()
+{
+	struct thread *cur = thread_current();
+	if (cur != idle_thread) {
+		cur->recent_cpu++;
+	}
+}
+
 void system_load_avg(void)
 {
 	int decay_rate = 16110; // 59 / 60
@@ -393,7 +402,7 @@ int thread_get_load_avg(void)
 int thread_get_recent_cpu(void)
 {
 	/* Not yet implemented. */
-	return 0;
+	return ftoi(thread_current()->recent_cpu * 100);
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -474,6 +483,7 @@ static void init_thread(struct thread *t, const char *name, int priority)
 	strlcpy(t->name, name, sizeof t->name);
 	t->stack = (uint8_t *)t + PGSIZE;
 	t->priority = priority;
+	t->recent_cpu = 0;
 	t->magic = THREAD_MAGIC;
 	list_push_back(&all_list, &t->allelem);
 }
