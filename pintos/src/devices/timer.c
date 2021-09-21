@@ -203,7 +203,7 @@ static void timer_interrupt(struct intr_frame *args UNUSED)
 	if (thread_mlfqs) {
 		recent_cpu_increase();
 		if (ticks % TIMER_FREQ == 0) {
-			system_load_avg();
+			system_load_avg_calculate();
 		}
 	}
 }

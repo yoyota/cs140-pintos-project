@@ -162,7 +162,7 @@ void recent_cpu_increase()
 	}
 }
 
-void system_load_avg(void)
+void system_load_avg_calculate(void)
 {
 	int decay_rate = 16110; // 59 / 60
 	int coefficient = 273; // 1 / 60

@@ -111,7 +111,7 @@ void thread_start(void);
 
 void thread_tick(void);
 void recent_cpu_increase(void);
-void system_load_avg(void);
+void system_load_avg_calculate(void);
 void thread_print_stats(void);
 
 typedef void thread_func(void *aux);
