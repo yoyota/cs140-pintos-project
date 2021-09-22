@@ -15,9 +15,7 @@ sub mlfqs_expected_load {
 	if (defined $recent_delta->[$i]) {
 	    my ($twice_load) = $load_avg * 2;
 	    my ($load_factor) = $twice_load / ($twice_load + 1);
-		printf "(recent_cpu + recent_delta) * load_factor = (%f + %f) * %f = ", $recent_cpu, $recent_delta->[$i], $load_factor;
 	    $recent_cpu = ($recent_cpu + $recent_delta->[$i]) * $load_factor;
-		printf "%f\n", $recent_cpu;
 	    push (@recent_cpu, $recent_cpu);
 	}
     }
