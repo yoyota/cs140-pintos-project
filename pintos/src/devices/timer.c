@@ -204,6 +204,7 @@ static void timer_interrupt(struct intr_frame *args UNUSED)
 		recent_cpu_increase();
 		if (ticks % TIMER_FREQ == 0) {
 			system_load_avg_calculate();
+			recent_cpu_calculate();
 		}
 	}
 }

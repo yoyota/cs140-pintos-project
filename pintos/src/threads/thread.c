@@ -158,7 +158,21 @@ void recent_cpu_increase()
 {
 	struct thread *cur = thread_current();
 	if (cur != idle_thread) {
-		cur->recent_cpu++;
+		cur->recent_cpu += 16384;
+	}
+}
+
+void recent_cpu_calculate(void)
+{
+	struct list_elem *e;
+	int tload_avg = thread_get_load_avg();
+	int k = 2 * tload_avg;
+	int coefficient = ff_div(k, (k + 16384));
+	for (e = list_begin(&all_list); e != list_end(&all_list);
+	     e = list_next(e)) {
+		struct thread *t = list_entry(e, struct thread, allelem);
+		t->recent_cpu =
+			ff_mul(coefficient, t->recent_cpu) + itof(t->nice);
 	}
 }
 
@@ -400,8 +414,11 @@ int thread_get_load_avg(void)
 /* Returns 100 times the current thread's recent_cpu value. */
 int thread_get_recent_cpu(void)
 {
-	/* Not yet implemented. */
-	return ftoi(thread_current()->recent_cpu * 100);
+	enum intr_level old_level = intr_disable();
+	int r = thread_current()->recent_cpu;
+	r = ftoi(r * 100);
+	intr_set_level(old_level);
+	return r;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
