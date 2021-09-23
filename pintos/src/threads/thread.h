@@ -112,6 +112,7 @@ void thread_start(void);
 
 void thread_tick(void);
 void recent_cpu_increase(void);
+void recent_cpu_calculate(void);
 void system_load_avg_calculate(void);
 void thread_print_stats(void);
 
