@@ -165,13 +165,13 @@ void recent_cpu_increase()
 void recent_cpu_calculate(void)
 {
 	struct list_elem *e;
-	int k = 2 * load_avg;
-	int coefficient = ff_div(k, (k + 16384));
+	int twiced_load = 2 * load_avg;
+	int load_factor = ff_div(twiced_load, (twiced_load + 16384));
 	for (e = list_begin(&all_list); e != list_end(&all_list);
 	     e = list_next(e)) {
 		struct thread *t = list_entry(e, struct thread, allelem);
 		t->recent_cpu =
-			ff_mul(coefficient, t->recent_cpu) + itof(t->nice);
+			ff_mul(load_factor, t->recent_cpu) + itof(t->nice);
 	}
 }
 
