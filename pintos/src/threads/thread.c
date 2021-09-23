@@ -165,8 +165,7 @@ void recent_cpu_increase()
 void recent_cpu_calculate(void)
 {
 	struct list_elem *e;
-	int tload_avg = thread_get_load_avg();
-	int k = 2 * tload_avg;
+	int k = 2 * load_avg;
 	int coefficient = ff_div(k, (k + 16384));
 	for (e = list_begin(&all_list); e != list_end(&all_list);
 	     e = list_next(e)) {
