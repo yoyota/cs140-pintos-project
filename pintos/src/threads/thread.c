@@ -185,6 +185,11 @@ void recent_cpu_calculate(void)
 	}
 }
 
+void priority_calculate(struct thread *t, void *aux UNUSED)
+{
+	t->priority = PRI_MAX - ftoi(t->recent_cpu / 4) - (t->nice * 2);
+}
+
 /* Prints thread statistics. */
 void thread_print_stats(void)
 {
@@ -498,10 +503,14 @@ static void init_thread(struct thread *t, const char *name, int priority)
 	t->status = THREAD_BLOCKED;
 	strlcpy(t->name, name, sizeof t->name);
 	t->stack = (uint8_t *)t + PGSIZE;
-	t->priority = priority;
 	t->recent_cpu = 0;
 	t->nice = 0;
 	t->magic = THREAD_MAGIC;
+	if (thread_mlfqs) {
+		priority_calculate(t, NULL);
+	} else {
+		t->priority = priority;
+	}
 	list_push_back(&all_list, &t->allelem);
 }
 
