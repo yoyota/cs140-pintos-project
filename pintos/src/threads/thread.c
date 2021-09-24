@@ -154,6 +154,15 @@ int get_running_thread_count()
 	return 1;
 }
 
+void system_load_avg_calculate(void)
+{
+	int decay_rate = 16110; // 59 / 60
+	int coefficient = 273; // 1 / 60
+	load_avg = ff_mul(decay_rate, load_avg);
+	load_avg +=
+		coefficient * (ready_list_size + get_running_thread_count());
+}
+
 void recent_cpu_increase()
 {
 	struct thread *cur = thread_current();
@@ -174,15 +183,6 @@ void recent_cpu_calculate(void)
 		t->recent_cpu =
 			ff_mul(load_factor, t->recent_cpu) + itof(t->nice);
 	}
-}
-
-void system_load_avg_calculate(void)
-{
-	int decay_rate = 16110; // 59 / 60
-	int coefficient = 273; // 1 / 60
-	load_avg = ff_mul(decay_rate, load_avg);
-	load_avg +=
-		coefficient * (ready_list_size + get_running_thread_count());
 }
 
 /* Prints thread statistics. */
