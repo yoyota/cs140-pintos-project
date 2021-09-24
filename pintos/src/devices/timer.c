@@ -206,6 +206,9 @@ static void timer_interrupt(struct intr_frame *args UNUSED)
 			system_load_avg_calculate();
 			recent_cpu_calculate();
 		}
+		if (ticks % 4 == 0) {
+			priority_calculate_all();
+		}
 	}
 }
 
