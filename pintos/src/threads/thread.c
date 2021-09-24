@@ -190,6 +190,11 @@ void priority_calculate(struct thread *t, void *aux UNUSED)
 	t->priority = PRI_MAX - ftoi(t->recent_cpu / 4) - (t->nice * 2);
 }
 
+void priority_calculate_all()
+{
+	thread_foreach(priority_calculate, NULL);
+}
+
 /* Prints thread statistics. */
 void thread_print_stats(void)
 {
