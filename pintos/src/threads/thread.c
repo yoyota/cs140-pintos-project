@@ -274,6 +274,15 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
 	return tid;
 }
 
+void ready_list_insert(struct thread *t)
+{
+	ASSERT(is_thread(t));
+	ASSERT(intr_get_level() == INTR_OFF);
+	list_push_back(&ready_list[t->priority], &t->elem);
+	ready_list_size++;
+	t->status = THREAD_READY;
+}
+
 /* Puts the current thread to sleep.  It will not be scheduled
    again until awoken by thread_unblock().
 
@@ -306,9 +315,7 @@ void thread_unblock(struct thread *t)
 	old_level = intr_disable();
 	ASSERT(t->status == THREAD_BLOCKED);
 
-	ready_list_size++;
-	list_push_back(&ready_list[t->priority], &t->elem);
-	t->status = THREAD_READY;
+	ready_list_insert(t);
 	intr_set_level(old_level);
 }
 
@@ -373,8 +380,7 @@ void thread_yield(void)
 
 	old_level = intr_disable();
 	if (cur != idle_thread) {
-		ready_list_size++;
-		list_push_back(&ready_list[cur->priority], &cur->elem);
+		ready_list_insert(cur);
 	}
 	cur->status = THREAD_READY;
 	schedule();
