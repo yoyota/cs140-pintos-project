@@ -187,7 +187,15 @@ void recent_cpu_calculate(void)
 
 void priority_calculate(struct thread *t, void *aux UNUSED)
 {
+	if (t == idle_thread) {
+		return;
+	}
 	t->priority = PRI_MAX - ftoi(t->recent_cpu / 4) - (t->nice * 2);
+	if (t->priority < PRI_MIN) {
+		t->priority = PRI_MIN;
+	} else if (t->priority > PRI_MAX) {
+		t->priority = PRI_MAX;
+	}
 }
 
 void priority_calculate_all()
