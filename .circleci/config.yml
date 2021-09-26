@@ -1,8 +1,0 @@
-version: 2
-jobs:
-  build:
-    docker:
-      - image: circleci/buildpack-deps
-    steps:
-      - checkout
-      - run: cd ps0 && make run
