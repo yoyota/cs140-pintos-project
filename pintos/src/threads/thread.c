@@ -412,7 +412,14 @@ void thread_foreach(thread_action_func *func, void *aux)
 void thread_set_priority(int new_priority)
 {
 	if (!thread_mlfqs) {
-		thread_current()->priority = new_priority;
+		struct thread *cur = running_thread();
+		cur->priority = new_priority;
+		int i = 0;
+		for (i = PRI_MAX; i > cur->priority; i--) {
+			if (!list_empty(&ready_list[i])) {
+				thread_yield();
+			}
+		}
 	}
 }
 
