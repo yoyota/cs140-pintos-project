@@ -85,7 +85,8 @@ int64_t timer_elapsed(int64_t then)
 	return timer_ticks() - then;
 }
 
-bool less_fn(const struct list_elem *a, const struct list_elem *b, void *aux)
+bool less_fn(const struct list_elem *a, const struct list_elem *b,
+	     void *aux UNUSED)
 {
 	struct timer *ta = list_entry(a, struct timer, elem);
 	struct timer *tb = list_entry(b, struct timer, elem);
