@@ -146,7 +146,7 @@ void thread_tick(void)
 }
 
 // load_vag = (59/60)*load_avg + (1/60)*ready_threads
-int get_running_thread_count()
+int get_running_thread_count(void)
 {
 	if (thread_current() == idle_thread) {
 		return 0;
@@ -198,7 +198,7 @@ void priority_calculate(struct thread *t, void *aux UNUSED)
 	}
 }
 
-void priority_calculate_all()
+void priority_calculate_all(void)
 {
 	thread_foreach(priority_calculate, NULL);
 }

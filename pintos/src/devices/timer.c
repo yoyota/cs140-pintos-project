@@ -179,7 +179,7 @@ void timer_print_stats(void)
 	printf("Timer: %" PRId64 " ticks\n", timer_ticks());
 }
 
-static void run_timers()
+static void run_timers(void)
 {
 	int64_t tick = timer_ticks();
 	struct list_elem *e;

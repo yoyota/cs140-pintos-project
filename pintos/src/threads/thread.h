@@ -114,7 +114,7 @@ void thread_tick(void);
 void system_load_avg_calculate(void);
 void recent_cpu_increase(void);
 void recent_cpu_calculate(void);
-void priority_calculate_all();
+void priority_calculate_all(void);
 void thread_print_stats(void);
 
 typedef void thread_func(void *aux);
