@@ -95,17 +95,8 @@ static struct timer *add_timer(int64_t ticks)
 		PANIC("Failed to allocate memory for timer");
 	timer->thread = thread_current();
 	timer->expires = start + ticks;
-	list_insert_ordered(&timer_list, &timer->elem, compare_timer_expires,
-			    NULL);
+	list_push_back(&timer_list, &timer->elem);
 	return timer;
-}
-
-bool compare_timer_expires(const struct list_elem *a, const struct list_elem *b,
-			   void *aux UNUSED)
-{
-	struct timer *ta = list_entry(a, struct timer, elem);
-	struct timer *tb = list_entry(b, struct timer, elem);
-	return ta->expires < tb->expires;
 }
 
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
@@ -185,8 +176,11 @@ void timer_print_stats(void)
 
 static void run_timers(void)
 {
+	list_sort(&timer_list, compare_timer_expires, NULL);
+
 	int64_t tick = timer_ticks();
 	struct list_elem *e;
+
 	for (e = list_begin(&timer_list); e != list_end(&timer_list);
 	     e = list_next(e)) {
 		struct timer *t = list_entry(e, struct timer, elem);
@@ -196,6 +190,14 @@ static void run_timers(void)
 		thread_unblock(t->thread);
 		list_remove(&t->elem);
 	}
+}
+
+bool compare_timer_expires(const struct list_elem *a, const struct list_elem *b,
+			   void *aux UNUSED)
+{
+	struct timer *ta = list_entry(a, struct timer, elem);
+	struct timer *tb = list_entry(b, struct timer, elem);
+	return ta->expires < tb->expires;
 }
 
 /* Timer interrupt handler. */
