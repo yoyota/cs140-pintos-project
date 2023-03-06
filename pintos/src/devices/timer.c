@@ -32,8 +32,8 @@ static bool too_many_loops(unsigned loops);
 static void busy_wait(int64_t loops);
 static void real_time_sleep(int64_t num, int32_t denom);
 static void real_time_delay(int64_t num, int32_t denom);
-bool less_fn(const struct list_elem *a, const struct list_elem *b,
-	     void *aux UNUSED);
+bool compare_timer_expires(const struct list_elem *a, const struct list_elem *b,
+			   void *aux UNUSED);
 
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
@@ -87,14 +87,6 @@ int64_t timer_elapsed(int64_t then)
 	return timer_ticks() - then;
 }
 
-bool less_fn(const struct list_elem *a, const struct list_elem *b,
-	     void *aux UNUSED)
-{
-	struct timer *ta = list_entry(a, struct timer, elem);
-	struct timer *tb = list_entry(b, struct timer, elem);
-	return ta->expires < tb->expires;
-}
-
 static struct timer *add_timer(int64_t ticks)
 {
 	int64_t start = timer_ticks();
@@ -103,8 +95,17 @@ static struct timer *add_timer(int64_t ticks)
 		PANIC("Failed to allocate memory for timer");
 	timer->thread = thread_current();
 	timer->expires = start + ticks;
-	list_insert_ordered(&timer_list, &timer->elem, less_fn, NULL);
+	list_insert_ordered(&timer_list, &timer->elem, compare_timer_expires,
+			    NULL);
 	return timer;
+}
+
+bool compare_timer_expires(const struct list_elem *a, const struct list_elem *b,
+			   void *aux UNUSED)
+{
+	struct timer *ta = list_entry(a, struct timer, elem);
+	struct timer *tb = list_entry(b, struct timer, elem);
+	return ta->expires < tb->expires;
 }
 
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must

@@ -414,8 +414,13 @@ void thread_foreach(thread_action_func *func, void *aux)
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority)
 {
-	if (!thread_mlfqs) {
-		struct thread *cur = running_thread();
+	if (thread_mlfqs) {
+		return;
+	}
+	struct thread *cur = running_thread();
+	int highest_holding_lock_priority =
+		thread_get_holding_lock_priority_max(cur);
+	if (new_priority > highest_holding_lock_priority) {
 		cur->priority = new_priority;
 		int i = 0;
 		for (i = PRI_MAX; i > cur->priority; i--) {
@@ -424,6 +429,27 @@ void thread_set_priority(int new_priority)
 			}
 		}
 	}
+	cur->priority_before_donated = new_priority;
+}
+
+bool compare_lock_priority(const struct list_elem *a, const struct list_elem *b,
+			   void *aux UNUSED)
+{
+	struct lock *la = list_entry(a, struct lock, elem);
+	struct lock *lb = list_entry(b, struct lock, elem);
+	return la->priority < lb->priority;
+}
+
+int thread_get_holding_lock_priority_max(struct thread *t)
+{
+	if (list_empty(&t->lock_list)) {
+		return -1;
+	}
+	int lock_priority_max =
+		list_entry(list_max(&t->lock_list, compare_lock_priority, NULL),
+			   struct lock, elem)
+			->priority;
+	return lock_priority_max;
 }
 
 /* Returns the current thread's priority. */
@@ -543,10 +569,12 @@ static void init_thread(struct thread *t, const char *name, int priority)
 	t->recent_cpu = 0;
 	t->nice = 0;
 	t->magic = THREAD_MAGIC;
+	list_init(&t->lock_list);
 	if (thread_mlfqs) {
 		priority_calculate(t, NULL);
 	} else {
 		t->priority = priority;
+		t->priority_before_donated = priority;
 	}
 	list_push_back(&all_list, &t->allelem);
 }
