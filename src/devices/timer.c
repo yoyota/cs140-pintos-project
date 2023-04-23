@@ -7,6 +7,7 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"
 
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -24,11 +25,15 @@ static int64_t ticks;
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
 
+static struct list timer_list;
+
 static intr_handler_func timer_interrupt;
 static bool too_many_loops(unsigned loops);
 static void busy_wait(int64_t loops);
 static void real_time_sleep(int64_t num, int32_t denom);
 static void real_time_delay(int64_t num, int32_t denom);
+bool compare_timer_expires(const struct list_elem *a, const struct list_elem *b,
+			   void *aux UNUSED);
 
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
@@ -36,6 +41,7 @@ void timer_init(void)
 {
 	pit_configure_channel(0, 2, TIMER_FREQ);
 	intr_register_ext(0x20, timer_interrupt, "8254 Timer");
+	list_init(&timer_list);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -81,15 +87,28 @@ int64_t timer_elapsed(int64_t then)
 	return timer_ticks() - then;
 }
 
+static struct timer *add_timer(int64_t ticks)
+{
+	int64_t start = timer_ticks();
+	struct timer *timer = malloc(sizeof *timer);
+	if (timer == NULL)
+		PANIC("Failed to allocate memory for timer");
+	timer->thread = thread_current();
+	timer->expires = start + ticks;
+	list_push_back(&timer_list, &timer->elem);
+	return timer;
+}
+
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void timer_sleep(int64_t ticks)
 {
-	int64_t start = timer_ticks();
-
+	struct timer *t = add_timer(ticks);
 	ASSERT(intr_get_level() == INTR_ON);
-	while (timer_elapsed(start) < ticks)
-		thread_yield();
+	enum intr_level old_level = intr_disable();
+	thread_block();
+	free(t);
+	intr_set_level(old_level);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -155,11 +174,48 @@ void timer_print_stats(void)
 	printf("Timer: %" PRId64 " ticks\n", timer_ticks());
 }
 
+static void run_timers(void)
+{
+	list_sort(&timer_list, compare_timer_expires, NULL);
+
+	int64_t tick = timer_ticks();
+	struct list_elem *e;
+
+	for (e = list_begin(&timer_list); e != list_end(&timer_list);
+	     e = list_next(e)) {
+		struct timer *t = list_entry(e, struct timer, elem);
+		if (tick < t->expires) {
+			return;
+		}
+		thread_unblock(t->thread);
+		list_remove(&t->elem);
+	}
+}
+
+bool compare_timer_expires(const struct list_elem *a, const struct list_elem *b,
+			   void *aux UNUSED)
+{
+	struct timer *ta = list_entry(a, struct timer, elem);
+	struct timer *tb = list_entry(b, struct timer, elem);
+	return ta->expires < tb->expires;
+}
+
 /* Timer interrupt handler. */
 static void timer_interrupt(struct intr_frame *args UNUSED)
 {
 	ticks++;
 	thread_tick();
+	run_timers();
+	if (thread_mlfqs) {
+		recent_cpu_increase();
+		if (ticks % TIMER_FREQ == 0) {
+			system_load_avg_calculate();
+			recent_cpu_calculate();
+		}
+		if (ticks % 4 == 0) {
+			priority_calculate_all();
+		}
+	}
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

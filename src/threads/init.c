@@ -342,7 +342,7 @@ static void usage(void)
 #ifdef USERPROG
 	       "  run 'PROG [ARG...]' Run PROG and wait for it to complete.\n"
 #else
-		"  run TEST           Run TEST.\n"
+	       "  run TEST           Run TEST.\n"
 #endif
 #ifdef FILESYS
 	       "  ls                 List files in the root directory.\n"
