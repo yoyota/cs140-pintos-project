@@ -9,7 +9,6 @@ WORKDIR ${HOME}
 
 RUN apt-get update && \
     apt-get install -y \
-    curl \
     build-essential \
     gdb \
     xorg-dev \
@@ -18,28 +17,26 @@ RUN apt-get update && \
     psmisc \
     locales \
     locales-all \
+    wget \
     qemu
 
 RUN ln -s /usr/bin/qemu-system-i386 /usr/bin/qemu
 
-RUN curl -L --output bochs-2.6.7.tar.gz https://downloads.sourceforge.net/project/bochs/bochs/2.6.7/bochs-2.6.7.tar.gz && \
-    tar -zxvf bochs-2.6.7.tar.gz && \
-    cd bochs-2.6.7 && \
-    ./configure --with-nogui --enable-gdb-stub && \
-    make && \
-    make install && \
-    cd ../ && \
-    rm -fr bochs-2.6.7 && \
-    rm bochs-2.6.7.tar.gz
+RUN apt-get install -y \
+    libncursesw5 \
+    libncurses5-dev
 
-RUN curl "https://bootstrap.pypa.io/pip/2.7/get-pip.py" -o "get-pip.py" && \
+COPY ./src/misc /misc
+RUN cd /misc && \
+    sh ./bochs-2.6.11-build.sh /usr/local
+
+
+RUN wget https://bootstrap.pypa.io/pip/2.7/get-pip.py && \
     python get-pip.py && \
     pip install python-engineio==3.11.2 && \
     pip install python-socketio==4.4.0 && \
     pip install gdbgui==0.12.0
 
-
-RUN echo "export PATH=$PATH:/pintos/utils" >> $HOME/.bashrc
 
 COPY ./Dockerfile /root
 
