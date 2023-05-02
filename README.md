@@ -5,3 +5,11 @@
 ## development environment
 
 [pintos dev env kaist](https://github.com/hangpark/pintos-dev-env-kaist)
+
+## Getting started
+
+```sh
+$ ./scripts/docker_run.sh
+root@ac954084d33b:/pintos# cd utils/
+root@ac954084d33b:/pintos/utils# make
+```
