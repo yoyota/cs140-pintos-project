@@ -78,6 +78,8 @@ static tid_t allocate_tid(void);
 int get_running_thread_count(void);
 void priority_calculate(struct thread *t, void *aux UNUSED);
 void ready_list_insert(struct thread *t);
+bool compare_lock_priority(const struct list_elem *a, const struct list_elem *b,
+			   void *aux);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -236,7 +238,6 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
 	struct switch_entry_frame *ef;
 	struct switch_threads_frame *sf;
 	tid_t tid;
-	enum intr_level old_level;
 
 	ASSERT(function != NULL);
 
@@ -551,8 +552,6 @@ static bool is_thread(struct thread *t)
    NAME. */
 static void init_thread(struct thread *t, const char *name, int priority)
 {
-	enum intr_level old_level;
-
 	ASSERT(t != NULL);
 	ASSERT(PRI_MIN <= priority && priority <= PRI_MAX);
 	ASSERT(name != NULL);
