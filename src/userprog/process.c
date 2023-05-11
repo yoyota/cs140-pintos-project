@@ -19,13 +19,15 @@
 #include "threads/vaddr.h"
 
 static thread_func start_process NO_RETURN;
-static bool load(const char *cmdline, void (**eip)(void), void **esp);
+static bool load(char *cmdline, void (**eip)(void), void **esp);
+void argument_passing(char **, void **);
+char **parse_args(char *);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
-tid_t process_execute(const char *file_name)
+tid_t process_execute(const char *cmdline)
 {
 	char *fn_copy;
 	tid_t tid;
@@ -35,10 +37,10 @@ tid_t process_execute(const char *file_name)
 	fn_copy = palloc_get_page(0);
 	if (fn_copy == NULL)
 		return TID_ERROR;
-	strlcpy(fn_copy, file_name, PGSIZE);
+	strlcpy(fn_copy, cmdline, PGSIZE);
 
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create(file_name, PRI_DEFAULT, start_process, fn_copy);
+	tid = thread_create(cmdline, PRI_DEFAULT + 1, start_process, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page(fn_copy);
 	return tid;
@@ -46,9 +48,8 @@ tid_t process_execute(const char *file_name)
 
 /* A thread function that loads a user process and starts it
    running. */
-static void start_process(void *file_name_)
+static void start_process(void *cmdline)
 {
-	char *file_name = file_name_;
 	struct intr_frame if_;
 	bool success;
 
@@ -57,10 +58,11 @@ static void start_process(void *file_name_)
 	if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
 	if_.cs = SEL_UCSEG;
 	if_.eflags = FLAG_IF | FLAG_MBS;
-	success = load(file_name, &if_.eip, &if_.esp);
+
+	success = load(cmdline, &if_.eip, &if_.esp);
 
 	/* If load failed, quit. */
-	palloc_free_page(file_name);
+	palloc_free_page(cmdline);
 	if (!success)
 		thread_exit();
 
@@ -197,8 +199,11 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
    Stores the executable's entry point into *EIP
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
-bool load(const char *file_name, void (**eip)(void), void **esp)
+bool load(char *cmdline, void (**eip)(void), void **esp)
 {
+	char **argv = parse_args(cmdline);
+	char *file_name = argv[0];
+
 	struct thread *t = thread_current();
 	struct Elf32_Ehdr ehdr;
 	struct file *file = NULL;
@@ -292,6 +297,8 @@ bool load(const char *file_name, void (**eip)(void), void **esp)
 	if (!setup_stack(esp))
 		goto done;
 
+	argument_passing(argv, esp);
+
 	/* Start address. */
 	*eip = (void (*)(void))ehdr.e_entry;
 
@@ -301,6 +308,21 @@ done:
 	/* We arrive here whether the load is successful or not. */
 	file_close(file);
 	return success;
+}
+
+char **parse_args(char *cmdline)
+{
+	static char *argv[LOADER_ARGS_LEN / 2 + 1];
+	char *token;
+	char *save_ptr;
+	int j = 0;
+	for (token = strtok_r(cmdline, " ", &save_ptr); token != NULL;
+	     token = strtok_r(NULL, " ", &save_ptr)) {
+		argv[j++] = token;
+	}
+	int argc = j;
+	argv[argc] = NULL;
+	return argv;
 }
 
 /* load() helpers. */
@@ -426,6 +448,62 @@ static bool setup_stack(void **esp)
 			palloc_free_page(kpage);
 	}
 	return success;
+}
+
+void argument_passing(char **argv, void **esp_)
+{
+	int i = 0;
+	char *a;
+	for (a = argv[0]; a != NULL; a = argv[i]) {
+		a = argv[++i];
+	}
+	int argc = i;
+	char **esp = (char **)esp_;
+	char *argv_address[argc];
+
+	// Place the words at the top of the stack.
+	for (i = argc - 1; i >= 0; i--) {
+		// +1 for null terminator
+		size_t l = strlen(argv[i]) + 1;
+		*esp -= sizeof(char) * l;
+		memcpy(*esp, argv[i], sizeof(char) * l);
+		argv_address[i] = *esp;
+	}
+
+	// word alignment
+	int word_align_count = (uintptr_t)*esp % 4;
+	for (i = 0; i < word_align_count; i++) {
+		*esp -= sizeof(uint8_t);
+		memset(*esp, 0, sizeof(uint8_t));
+	}
+
+	// argv[argc] is a null pointer
+	size_t s = sizeof(argv[argc]);
+	*esp -= s;
+	memset(*esp, 0, s);
+
+	// push the address of each string
+	for (i = argc - 1; i >= 0; i--) {
+		*esp -= sizeof(char *);
+		memcpy(*esp, &argv_address[i], sizeof(char *));
+	}
+
+	// push the address of argv[0]
+	char *argv_start_address = *esp;
+	*esp -= sizeof(char *);
+	memcpy(*esp, &argv_start_address, sizeof(char *));
+
+	// push argc
+	*esp -= sizeof(int);
+	memcpy(*esp, &argc, sizeof(int));
+
+	// push fake return address
+	*esp -= sizeof(void *);
+	memset(*esp, 0, sizeof(void *));
+
+	// hex dump for debug
+	hex_dump((uintptr_t)*esp, *esp, (uintptr_t)PHYS_BASE - (uintptr_t)*esp,
+		 true);
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
