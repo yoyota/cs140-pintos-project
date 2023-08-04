@@ -1,5 +1,6 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
+#include <string.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
@@ -66,6 +67,8 @@ static void handle_exit(struct intr_frame *f)
 
 static void exit(int status_code)
 {
-	printf("%s: exit(%d)\n", thread_name(), status_code);
+	char file_name[16];
+	strlcpy(file_name, thread_name(), strcspn(thread_name(), " ") + 1);
+	printf("%s: exit(%d)\n", file_name, status_code);
 	thread_exit();
 }
