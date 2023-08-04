@@ -39,8 +39,10 @@ tid_t process_execute(const char *cmdline)
 		return TID_ERROR;
 	strlcpy(fn_copy, cmdline, PGSIZE);
 
+	char *save_ptr;
+	char *file_name = strtok_r(cmdline, " ", &save_ptr);
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create(cmdline, PRI_DEFAULT + 1, start_process, fn_copy);
+	tid = thread_create(file_name, PRI_DEFAULT + 1, start_process, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page(fn_copy);
 	return tid;
@@ -502,8 +504,8 @@ void argument_passing(char **argv, void **esp_)
 	memset(*esp, 0, sizeof(void *));
 
 	// hex dump for debug
-	hex_dump((uintptr_t)*esp, *esp, (uintptr_t)PHYS_BASE - (uintptr_t)*esp,
-		 true);
+	// hex_dump((uintptr_t)*esp, *esp, (uintptr_t)PHYS_BASE - (uintptr_t)*esp,
+	// 	 true);
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
