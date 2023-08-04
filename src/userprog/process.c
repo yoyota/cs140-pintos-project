@@ -502,8 +502,8 @@ void argument_passing(char **argv, void **esp_)
 	memset(*esp, 0, sizeof(void *));
 
 	// hex dump for debug
-	hex_dump((uintptr_t)*esp, *esp, (uintptr_t)PHYS_BASE - (uintptr_t)*esp,
-		 true);
+	// hex_dump((uintptr_t)*esp, *esp, (uintptr_t)PHYS_BASE - (uintptr_t)*esp,
+	// 	 true);
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
