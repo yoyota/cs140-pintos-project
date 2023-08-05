@@ -85,8 +85,12 @@ static void start_process(void *cmdline)
 
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
-int process_wait(tid_t child_tid UNUSED)
+int process_wait(tid_t child_tid)
 {
+	struct thread *t = thread_get(child_tid);
+	while (t != NULL) {
+		t = thread_get(child_tid);
+	}
 	return -1;
 }
 
