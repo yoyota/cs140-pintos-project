@@ -119,6 +119,24 @@ eventually woken up and timer_sleep() calls intr_set_level(old_level).
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
 
+The current design maintains a single list of sleeping threads, always kept sorted by their wake-up time. When timer_sleep() is
+called, it traverses the list to insert the new timer in its correct sorted position (an O(N) operation). This makes the timer
+interrupt handler highly efficient, as it only needs to check timers at the head of the list (an O(1) operation for each expired
+timer).
+
+
+An alternative, more advanced design I considered is using a min-heap data structure instead of a sorted list. A min-heap would
+store timers based on their wake-up time, with the timer that will expire soonest always at the root. This would offer O(log N)
+performance for both adding a new timer and for removing the next expiring timer.
+
+
+The sorted-list design is superior to the min-heap in the context of Pintos. While the min-heap is asymptotically faster, the
+sorted list provides a much better balance of performance and simplicity for a teaching OS. It leverages the existing,
+easy-to-understand list library, avoiding the need to implement a more complex heap data structure. Given that the number of
+sleeping threads in Pintos is typically small, the performance gain from a min-heap would be negligible, and the added
+implementation complexity would detract from the primary educational goals.
+
+
              PRIORITY SCHEDULING
              ===================
 
