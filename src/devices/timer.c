@@ -103,9 +103,9 @@ static struct timer *add_timer(int64_t ticks)
    be turned on. */
 void timer_sleep(int64_t ticks)
 {
-	struct timer *t = add_timer(ticks);
 	ASSERT(intr_get_level() == INTR_ON);
 	enum intr_level old_level = intr_disable();
+	struct timer *t = add_timer(ticks);
 	thread_block();
 	free(t);
 	intr_set_level(old_level);
