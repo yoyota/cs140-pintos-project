@@ -8,9 +8,6 @@
 
 >> Fill in the names and email addresses of your group members.
 
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
 
 ---- PRELIMINARIES ----
 
@@ -24,16 +21,52 @@ FirstName LastName <email@domain.example>
                  ALARM CLOCK
                  ===========
 
+git diff 9ba1d82677569f77e616c82b556ac6b4133b0a5f 84bb941fec80d4e487528cbfa5c254c9e6435855
+timer fix commit 01457a568ebf5fcd42c65345a5a7dc564cbd8f2a
+
 ---- DATA STRUCTURES ----
 
 >> A1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+
+1 struct timer {
+   2     int64_t expires;
+   3     struct thread *thread;
+   4     struct list_elem elem;
+   5 };
+
+   * Purpose: Represents a sleeping thread, storing its wake-up time (expires) and a pointer to the thread itself for waking it up.
+
+  File: `devices/timer.c`
+
+
+
+   1 static int64_t ticks;
+
+   * Purpose: A global counter for the number of timer interrupts since the OS booted, used to measure time.
+
+
+
+   1 static struct list timer_list;
+
+   * Purpose: A global list containing struct timer elements for all threads that are currently sleeping via timer_sleep().
+
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),
 >> including the effects of the timer interrupt handler.
+
+1. The calling thread disables interrupts, creates a timer structure containing its desired wake-up time, and adds it to a global
+    list of sleeping threads.
+2. The thread then blocks, yielding the CPU.
+3. The periodic timer interrupt handler checks the list of sleeping threads. When a thread's wake-up time arrives, the handler
+    unblocks it.
+4. Once unblocked, the thread becomes ready to run and will eventually be scheduled to resume execution right after its call to
+    timer_sleep().
+
 
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
@@ -43,8 +76,43 @@ FirstName LastName <email@domain.example>
 >> A4: How are race conditions avoided when multiple threads call
 >> timer_sleep() simultaneously?
 
+Here's the sequence of events and why a race condition is
+  avoided:
+
+1. A thread enters the timer_sleep() function.
+2. It immediately calls enum intr_level old_level = intr_disable();. At this exact moment, all interrupts, including timer
+    interrupts, are turned off for the current CPU core.
+3. The code then proceeds to create a timer and add it to the timer_list.
+4. Finally, it calls thread_block().
+
+
+Because interrupts are disabled, a timer interrupt cannot occur between the call to intr_disable() and the point where the thread
+blocks and the scheduler is invoked. The operations on the shared timer_list are performed within a critical section protected by
+the interrupt disable/enable mechanism.
+
+
+If a hardware timer interrupt signal arrives while interrupts are disabled, the CPU's interrupt controller will hold it in a
+pending state. The interrupt will only be serviced after the current thread blocks and the scheduler switches to a new thread,
+which will eventually re-enable interrupts as part of its normal operation. By that time, the sleeping thread's timer is already
+safely on the timer_list, so there is no race condition.
+
+
+
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
+
+Disable Interrupts: The most crucial step is the call to intr_disable() in timer_sleep(). This is done after the timer has been
+added to the sleep queue but before the thread is put to sleep. Disabling interrupts prevents the CPU from responding to any
+hardware interrupts, including the timer interrupt.
+Atomic Operation: Because interrupts are disabled, the timer_interrupt() handler cannot run between the intr_disable() call and
+the thread_block() call. This makes the process of adding a timer, disabling interrupts, and going to sleep an atomic operation
+with respect to the interrupt handler.
+thread_block(): The thread_block() function, which actually puts the thread to sleep, requires that interrupts are already
+disabled. It even includes an ASSERT to enforce this, crashing the kernel if a thread tries to block without first disabling
+interrupts.
+Scheduler: thread_block() then calls schedule(), which also runs with interrupts disabled. The scheduler chooses the next thread
+to run and switches to it. Interrupts will be re-enabled later, either by the new thread's context or when the original thread is
+eventually woken up and timer_sleep() calls intr_set_level(old_level).
 
 ---- RATIONALE ----
 
