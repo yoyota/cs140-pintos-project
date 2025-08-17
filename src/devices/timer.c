@@ -95,7 +95,7 @@ static struct timer *add_timer(int64_t ticks)
 		PANIC("Failed to allocate memory for timer");
 	timer->thread = thread_current();
 	timer->expires = start + ticks;
-	list_push_back(&timer_list, &timer->elem);
+	list_insert_ordered(&timer_list, &timer->elem, compare_timer_expires, NULL);
 	return timer;
 }
 
@@ -176,19 +176,13 @@ void timer_print_stats(void)
 
 static void run_timers(void)
 {
-	list_sort(&timer_list, compare_timer_expires, NULL);
-
 	int64_t tick = timer_ticks();
-	struct list_elem *e;
+	struct list_elem *e = list_begin(&timer_list);
 
-	for (e = list_begin(&timer_list); e != list_end(&timer_list);
-	     e = list_next(e)) {
+	while (e != list_end(&timer_list) && tick >= list_entry(e, struct timer, elem)->expires) {
 		struct timer *t = list_entry(e, struct timer, elem);
-		if (tick < t->expires) {
-			return;
-		}
 		thread_unblock(t->thread);
-		list_remove(&t->elem);
+		e = list_remove(e);
 	}
 }
 
