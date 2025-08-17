@@ -143,9 +143,129 @@ implementation complexity would detract from the primary educational goals.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+`struct thread` member:
+* int priority_before_donated;
+    * Purpose: Stores the thread's original priority. This is used to restore a thread's priority after it no longer needs to be
+        donated a higher one.
+* int recent_cpu;
+    * Purpose: Stores a weighted average of the CPU time a thread has used recently, for the MLFQS. It helps determine thread
+        priority.
+* int nice;
+    * Purpose: A user-adjustable value that influences the thread's dynamic priority in the MLFQS. A lower nice value means a
+        higher priority.
+* struct list lock_list;
+    * Purpose: A list of locks currently held by the thread. This is essential for implementing priority donation, allowing for
+        nested donations.
+* struct lock *lock_wait;
+    * Purpose: A pointer to the lock that the thread is currently waiting to acquire. This is used to establish the donation
+        chain.
+
+Global/Static Variables:
+* static struct list ready_list[PRI_MAX + 1];
+    * Purpose: An array of ready lists, one for each priority level. This makes finding the highest-priority ready thread a
+        constant-time operation.
+* int ready_list_size;
+    * Purpose: Tracks the total number of threads across all ready lists. Used for calculating the system load average in the
+        MLFQS.
+* int load_avg;
+    * Purpose: A global variable representing the system load average, used by the MLFQS to dynamically adjust thread priorities
+        based on system-wide activity.
+* bool thread_mlfqs;
+    * Purpose: A boolean flag, controlled by a kernel command-line option, to select between the default round-robin scheduler and
+        the multi-level feedback queue scheduler.
+
+
 >> B2: Explain the data structure used to track priority donation.
 >> Use ASCII art to diagram a nested donation.  (Alternately, submit a
 >> .png file.)
+
+The priority donation system is tracked through a combination of modifications to the struct thread and struct lock.
+
+
+1. `struct thread`:
+    * lock_wait (struct lock *): A pointer that is non-NULL if the thread is blocked waiting for a lock. This creates the
+        dependency link: Thread -> waits for -> Lock.
+    * lock_list (struct list): A list of all locks the thread currently holds. This allows a thread to be a dependency for
+        multiple other threads.
+    * priority_before_donated (int): Stores the thread's base priority, so when donations are no longer needed, its priority can
+        be correctly restored.
+
+
+2. `struct lock`:
+    * holder (struct thread *): A pointer to the thread that currently owns the lock. This creates the reverse link: Lock -> held 
+        by -> Thread.
+    * priority (int): This field is crucial. It stores the maximum priority of all threads currently waiting in the lock's
+        semaphore waiters list. When a high-priority thread starts waiting, this field is updated, signaling that a donation may be
+        required.
+
+
+When a thread T_H (high priority) tries to acquire a lock held by T_L (low priority), T_H is added to the lock's waiters list.
+The system updates the lock's priority to T_H's priority. Then, the lock holder T_L has its effective priority elevated to match
+the lock's new, higher priority. This change can propagate recursively if T_L is itself waiting on another lock.
+
+ASCII Art Diagram of Nested Donation
+
+
+This diagram shows a scenario with three threads (High, Medium, Low) and two locks (A, B), resulting in a nested priority
+donation.
+
+
+Initial State:
+* Thread L (Priority 30) holds Lock A.
+* Thread M (Priority 40) holds Lock B.
+* Thread H (Priority 50) is running.
+
+1 [Thread H (pri=50)]      [Thread M (pri=40)]      [Thread L (pri=30)]
+2      |                        |                        |
+3    (running)                holds                    holds
+4                               |                        |
+5                               V                        V
+6                            (Lock B)                 (Lock A)
+
+
+---
+
+Step 1: Medium waits for Low
+* Thread M attempts to acquire Lock A, but it is held by L.
+* M blocks, waiting for A.
+* M donates its priority (40) to L. L's effective priority becomes 40.
+
+1 [Thread H (pri=50)]      [Thread M (pri=40)] --waits for-> (Lock A)
+2      |                        |                          ^
+3    (running)                holds                        |
+4                               |                        donates to
+5                               V                          |
+6                            (Lock B)                 [Thread L (pri=40)]
+7                                                          ^
+8                                                          |
+9                                                       (now 40, was 30)
+
+
+---
+
+Step 2: High waits for Medium (Nested Donation)
+* Thread H attempts to acquire Lock B, but it is held by M.
+* H blocks, waiting for B.
+* H donates its priority (50) to M. M's effective priority becomes 50.
+* Crucially, because M's priority was boosted while it is waiting for Lock A, it recursively donates its new, higher priority (50) 
+    to Lock A's holder, L.
+* L's effective priority is now 50.
+
+1 [Thread H (pri=50)] --waits for-> (Lock B) --held by-- [Thread M (pri=50)] --waits for-> (Lock A) --held by-- [Thread L (pri=50)]
+2       |                                                    ^      |                                                 ^
+    
+3       |                                                    |      |                                                 |
+    
+4       +-------------------donates to-----------------------+      |                                                 |
+    
+5                                                                   +------------------re-donates to -----------------+
+    
+6                                                                                    
+
+  Final State:
+   * H (pri=50) waits for M.
+   * M (pri=50) waits for L.
+   * L (pri=50) can now run with the highest priority to release Lock A, resolving the dependency chain.
 
 ---- ALGORITHMS ----
 
@@ -185,19 +305,6 @@ implementation complexity would detract from the primary educational goals.
 >> scheduling decision and the priority and recent_cpu values for each
 >> thread after each given number of timer ticks:
 
-timer  recent_cpu    priority   thread
-ticks   A   B   C   A   B   C   to run
------  --  --  --  --  --  --   ------
- 0
- 4
- 8
-12
-16
-20
-24
-28
-32
-36
 
 >> C3: Did any ambiguities in the scheduler specification make values
 >> in the table uncertain?  If so, what rule did you use to resolve
