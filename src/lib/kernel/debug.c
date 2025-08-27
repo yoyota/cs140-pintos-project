@@ -47,6 +47,8 @@ void debug_panic(const char *file, int line, const char *function,
 		;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wframe-address"
 /* Print call stack of a thread.
    The thread may be running, ready, or blocked. */
 static void print_stacktrace(struct thread *t, void *aux UNUSED)
@@ -104,6 +106,7 @@ static void print_stacktrace(struct thread *t, void *aux UNUSED)
 		printf(" %p", frame[1]);
 	printf(".\n");
 }
+#pragma GCC diagnostic pop
 
 /* Prints call stack of all threads. */
 void debug_backtrace_all(void)
