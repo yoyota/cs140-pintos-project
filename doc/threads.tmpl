@@ -391,6 +391,42 @@ acquire L.
 >> how your implementation avoids it.  Can you use a lock to avoid
 >> this race?
 
+The race condition in thread_set_priority() exists because a thread's priority is shared data. It can be modified by
+thread_set_priority() at the same time it is being read by the scheduler to make decisions. This can lead to incorrect behavior.
+
+Here is a specific scenario:
+1. A running thread T_A (priority 30) calls thread_set_priority(10) to lower its priority.
+2. The line T_A->priority = 10; executes.
+3. Race: A timer interrupt occurs immediately. The scheduler runs and decides which thread to execute next. It sees that T_A has a
+    priority of 10 and that another thread T_B on the ready list has a priority of 20. It schedules T_B to run.
+4. Later, when T_A gets to run again, it resumes inside thread_set_priority() after the point where its priority was changed. It
+    might then execute the logic to check if it should yield, but the preemption decision has already been handled inconsistently by
+    the scheduler.
+
+An even more complex race, which we discussed, involves priority donation happening in the middle of a priority change, leading to
+the thread failing to yield when it should have.
+
+How a Correct Implementation Avoids It
+
+A correct implementation must ensure that the act of changing a thread's priority and the act of checking whether to yield the
+CPU are atomic. In a kernel, this is typically solved by disabling interrupts during the critical section.
+
+By wrapping the logic in intr_disable() and intr_set_level(), we prevent the scheduler's timer interrupt from interfering, thus
+avoiding the race.
+
+Can You Use a Lock?
+
+No, you cannot use a standard lock to avoid this specific race, for two critical reasons:
+
+
+1. Interrupt Context: The scheduler is often triggered by a timer interrupt. Code running in an interrupt handler cannot acquire a
+    lock that might cause the thread to block or sleep. Doing so would hang or crash the entire system.
+2. Deadlock: Using locks for scheduler data structures is a classic recipe for deadlock. For example, thread_set_priority might
+    acquire a priority_lock and then call thread_yield, which needs to acquire a lock on the ready list. At the same time, the
+    scheduler might hold the ready list lock and need the priority_lock to inspect a thread. This circular dependency would cause a
+    deadlock.
+
+
 ---- RATIONALE ----
 
 >> B7: Why did you choose this design?  In what ways is it superior to
