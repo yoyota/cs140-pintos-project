@@ -306,8 +306,84 @@ wake-up event to select the one with the highest priority, rather than by mainta
 >> B4: Describe the sequence of events when a call to lock_acquire()
 >> causes a priority donation.  How is nested donation handled?
 
+When a higher-priority thread attempts to acquire a lock held by a lower-priority thread, the following sequence occurs:
+
+
+1. `lock_acquire()` called: A thread, let's call it T_High, calls lock_acquire() on a lock L.
+2. Check Lock Holder: The function checks if the lock L is held. Let's say it's held by another thread, T_Low, which has a lower
+    priority.
+3. Priority Donation:
+    * Before attempting to acquire the lock's semaphore, lock_acquire() calls try_priority_donate_nest().
+    * This function compares T_High's priority with T_Low's priority.
+    * Since T_High's priority is greater, T_Low's priority member is updated to match T_High's priority. This is the core
+        "donation" step.
+4. Waiting for Lock:
+    * T_High sets its lock_wait member to point to the lock L. This is crucial for handling nested donations.
+    * T_High then calls sema_down() on the lock's semaphore and enters a waiting state.
+5. Scheduler Action: Because T_Low now has a higher (donated) priority, the scheduler will favor running T_Low over other,
+    originally higher-priority threads. This allows T_Low to finish its critical section and release the lock.
+6. `lock_release()` Called: When T_Low finishes, it calls lock_release() on L.
+7. Priority Restoration:
+    * Inside lock_release(), the lock is removed from T_Low's list of held locks (lock_list).
+    * T_Low's priority is then recalculated. If it holds no other locks that have received donations, its priority is restored to
+        its original priority_before_donated. If it does hold other locks, its priority is set to the highest priority of any thread
+        waiting on the locks it still holds.
+8. Wake Up Waiting Thread: lock_release() calls sema_up(), which wakes up one of the waiting threads. Since the waiters list is
+    sorted by priority, T_High will be chosen, and it can now acquire the lock.
+
+Handling Nested Donation
+
+Nested donation occurs when a chain of threads is waiting for locks. For example, T_High waits for T_Mid, who in turn waits for
+T_Low. The implementation handles this elegantly using a loop within try_priority_donate_nest().
+
+Here's the breakdown of the nested donation logic from try_priority_donate_nest():
+
+1. Initialization: The function starts with the lock that the current thread (cur, which is T_High in our example) wants to acquire.
+2. The Loop: The while loop continues as long as there is a lock in the chain (l != NULL), the lock has a holder, and the holder's
+    priority is less than the current thread's priority.
+3. Donation: Inside the loop, the holder's priority is donated.
+4. Chaining: The crucial step for nested donation is l = l->holder->lock_wait;. This line moves the focus of the loop "up" the
+    dependency chain. The lock l becomes the lock that the previous holder is waiting for.
+5. Iteration: The loop then repeats, comparing T_High's priority with the new lock holder's priority, and so on, until the end of
+    the chain is reached (either a lock holder has a higher or equal priority, or a thread in the chain is not waiting for any lock,
+    i.e., lock_wait is NULL).
+
+
+This mechanism ensures that a high priority is propagated through the entire chain of waiting threads, effectively resolving
+complex priority inversion scenarios.
+
+
 >> B5: Describe the sequence of events when lock_release() is called
 >> on a lock that a higher-priority thread is waiting for.
+
+Let's assume T_Low is the current thread holding lock L, and T_High is a higher-priority thread that is blocked, waiting to
+acquire L.
+
+1. `lock_release()` is Called: T_Low calls lock_release(L).
+2. Holder is Cleared: The lock's holder field is set to NULL, indicating it is now available.
+3. Priority is Restored: The priority of T_Low is recalculated. Since it no longer holds lock L, the donated priority from T_High is
+    removed. Assuming T_Low holds no other locks with donated priorities, its priority reverts to its original, lower value.
+4. `sema_up()` is Called: lock_release() calls sema_up() on the lock's internal semaphore to signal that the lock is free.
+5. Highest-Priority Waiter is Chosen:
+    * Inside sema_up(), the code checks the semaphore's waiters list, which is not empty.
+    * It calls list_max() with the compare_thread_priority function to find the waiting thread with the highest priority. In this
+        case, it selects T_High.
+6. `thread_unblock()` is Called: T_High is removed from the waiters list, and sema_up() calls thread_unblock() to transition T_High
+    to the ready state.
+7. Move to Ready List: thread_unblock() places T_High onto the ready_list. It is inserted into the queue corresponding to its high
+    priority level.
+8. Preemption Check:
+    * thread_unblock() compares the priority of the newly awakened thread (T_High) with the priority of the currently running thread
+        (T_Low).
+    * Since T_High->priority is greater than T_Low->priority (which was just restored to its lower base priority), the condition is
+        true.
+9. CPU is Yielded: Because a higher-priority thread is now ready to run, thread_yield() is called on T_Low.
+10. Scheduling:
+    * thread_yield() places T_Low on the appropriate (lower-priority) ready list and calls the schedule() function.
+    * The scheduler's next_thread_to_run() function scans the ready lists from highest to lowest priority and selects T_High.
+11. Context Switch: A context switch occurs from T_Low to T_High. T_High resumes its execution inside lock_acquire(), successfully
+    acquires the lock, and proceeds into its critical section.
+
 
 ---- SYNCHRONIZATION ----
 
