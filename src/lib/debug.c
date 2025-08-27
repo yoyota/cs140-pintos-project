@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wframe-address"
 /* Prints the call stack, that is, a list of addresses, one in
    each of the functions we are nested within.  gdb or addr2line
    may be applied to kernel.o to translate these into file names,
@@ -27,3 +29,4 @@ void debug_backtrace(void)
 		       "of the Pintos documentation for more information.\n");
 	}
 }
+#pragma GCC diagnostic pop
