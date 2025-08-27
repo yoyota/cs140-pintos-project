@@ -424,6 +424,7 @@ void thread_set_priority(int new_priority)
 	if (thread_mlfqs) {
 		return;
 	}
+	enum intr_level old_level = intr_disable();
 	struct thread *cur = running_thread();
 	int highest_holding_lock_priority =
 		thread_get_holding_lock_priority_max(cur);
@@ -437,6 +438,7 @@ void thread_set_priority(int new_priority)
 		}
 	}
 	cur->priority_before_donated = new_priority;
+	intr_set_level(old_level);
 }
 
 bool compare_lock_priority(const struct list_elem *a, const struct list_elem *b,
