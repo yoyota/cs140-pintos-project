@@ -468,6 +468,32 @@ chosen design is a more pragmatic and effective engineering solution for Pintos.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+File: `thread.h`
+
+1 /* In struct thread */
+2 int recent_cpu;
+3 int nice;
+
+* Purpose of `recent_cpu`: A fixed-point value estimating the CPU time a thread has recently used, which is a key factor in its
+    priority calculation.
+* Purpose of `nice`: A user-adjustable value that statically influences a thread's priority. A higher nice value lowers the
+    thread's priority.
+
+1 /* Global variable declaration */
+2 extern bool thread_mlfqs;
+
+* Purpose: A global flag, set by a kernel command-line option, to enable the Multi-Level Feedback Queue Scheduler instead of the
+    default priority scheduler.
+
+File: `thread.c`
+
+1 /* Global variable definition */
+2 int load_avg;
+
+* Purpose: A fixed-point global variable that maintains a moving average of the system load, used for dynamically recalculating
+    thread priorities.
+
+
 ---- ALGORITHMS ----
 
 >> C2: Suppose threads A, B, and C have nice values 0, 1, and 2.  Each
