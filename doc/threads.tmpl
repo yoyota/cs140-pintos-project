@@ -501,10 +501,37 @@ File: `thread.c`
 >> scheduling decision and the priority and recent_cpu values for each
 >> thread after each given number of timer ticks:
 
+This table was filled assuming load_avg starts at 0 and is not updated within this short time frame. Priorities are recalculated
+every 4 ticks. recent_cpu is incremented by 1 for the running thread each tick.
+
+┌───────┬─────────┬───────────────┬───────┬───────────────┬───────┬───────────────┬───────┐
+│ ticks │ running │ recent\_cpu A │ pri A │ recent\_cpu B │ pri B │ recent\_cpu C │ pri C │
+├───────┼─────────┼───────────────┼───────┼───────────────┼───────┼───────────────┼───────┤
+│ 0     │ A       │ 0             │ 63    │ 0             │ 61    │ 0             │ 59    │
+│ 4     │ A       │ 4             │ 62    │ 0             │ 61    │ 0             │ 59    │
+│ 8     │ B       │ 8             │ 61    │ 0             │ 61    │ 0             │ 59    │
+│ 12    │ A       │ 8             │ 61    │ 4             │ 60    │ 0             │ 59    │
+│ 16    │ B       │ 12            │ 60    │ 4             │ 60    │ 0             │ 59    │
+│ 20    │ A       │ 12            │ 60    │ 8             │ 59    │ 0             │ 59    │
+│ 24    │ B       │ 16            │ 59    │ 8             │ 59    │ 0             │ 59    │
+│ 28    │ C       │ 16            │ 59    │ 12            │ 58    │ 0             │ 59    │
+│ 32    │ A       │ 16            │ 59    │ 12            │ 58    │ 4             │ 58    │
+│ 36    │ B       │ 20            │ 58    │ 12            │ 58    │ 4             │ 58    │
+└───────┴─────────┴───────────────┴───────┴───────────────┴───────┴───────────────┴───────┘
 
 >> C3: Did any ambiguities in the scheduler specification make values
 >> in the table uncertain?  If so, what rule did you use to resolve
 >> them?  Does this match the behavior of your scheduler?
+
+Yes, there was one main ambiguity in the specification: how to break ties between threads that have the same highest priority.
+
+* Ambiguity: The specification does not explicitly define the scheduling order when multiple threads share the same priority
+    value.
+* Rule Used: I resolved this by assuming a standard round-robin policy. When a thread's time slice expires, it is placed at the
+    back of the ready queue for its priority level. The scheduler then dispatches the thread at the front of that queue.
+* Scheduler Match: This matches the behavior of the implemented scheduler. The code uses an array of FIFO lists (ready_list[]).
+    thread_yield() adds the current thread to the back of the appropriate list (list_push_back), and next_thread_to_run() retrieves
+    the next thread from the front (list_pop_front), naturally creating round-robin behavior for a given priority level.
 
 >> C4: How is the way you divided the cost of scheduling between code
 >> inside and outside interrupt context likely to affect performance?
