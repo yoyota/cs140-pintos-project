@@ -432,6 +432,33 @@ No, you cannot use a standard lock to avoid this specific race, for two critical
 >> B7: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
 
+This design was chosen for its balance of performance, simplicity, and correctness, making optimal use of the tools available in
+Pintos.
+
+1. Scheduler Efficiency: The cornerstone of the design is the ready_list, an array of lists indexed by priority (static struct list 
+    ready_list[PRI_MAX + 1]; in thread.c). This is the most efficient way to implement a priority queue when the priorities are a
+    small, fixed range of integers. It makes finding the next thread to run a constant-time O(1) operation in the best case (the
+    highest priority list is non-empty) and O(k) in the worst case where k is the number of priority levels, not the number of
+    threads. This is vastly superior to a single ready list that would need to be kept sorted, which would make insertions O(N) or
+    O(log N) with a more complex heap structure.
+
+2. Simplicity in Synchronization: The design deliberately keeps the "wait" path simple. When a thread blocks on a semaphore, it is
+    added to the waiters list with a simple list_push_back() (sema_down() in synch.c). The complexity is shifted to the "signal"
+    path (sema_up()), which performs a linear scan using list_max() to wake the highest-priority waiter. This is a superior
+    trade-off for this environment compared to maintaining sorted waiter lists. A sorted-list approach would complicate the wait
+    logic and offer no significant performance benefit, as the number of waiters on any single lock is typically small. The current
+    implementation is clean, easy to verify, and less prone to bugs.
+
+3. Robustness: The priority donation mechanism is both robust and elegant. The try_priority_donate_nest() function in synch.c
+    correctly handles arbitrarily deep nested donations by traversing the chain of waiting locks. This ensures the priority
+    inversion problem is solved completely, not just for a single level.
+
+An alternative considered was to use a single, globally-sorted ready list and also keep all lock/semaphore waiter lists sorted by
+priority. The chosen design is superior because the array of ready lists provides faster scheduling, and the unsorted waiter lists
+simplify the implementation of the waiting logic without a meaningful performance penalty for the scale of this system. The
+chosen design is a more pragmatic and effective engineering solution for Pintos.
+
+
               ADVANCED SCHEDULER
               ==================
 
