@@ -18,7 +18,7 @@ RUN apt-get update && \
     locales \
     locales-all \
     wget \
-    qemu
+    qemu-system-x86
 
 RUN ln -s /usr/bin/qemu-system-i386 /usr/bin/qemu
 
