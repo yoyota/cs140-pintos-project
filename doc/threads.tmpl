@@ -536,6 +536,26 @@ Yes, there was one main ambiguity in the specification: how to break ties betwee
 >> C4: How is the way you divided the cost of scheduling between code
 >> inside and outside interrupt context likely to affect performance?
 
+The design divides the scheduling work such that periodic calculations happen inside the timer interrupt context, while the
+actual context switch happens outside. This has significant performance implications.
+
+* Work in Interrupt Context: The timer interrupt handler, either directly or by calling other functions, is responsible for:
+    1. Incrementing the running thread's recent_cpu (every tick).
+    2. Recalculating all thread priorities (every 4 ticks).
+    3. Recalculating load_avg and all recent_cpu values (every second).
+
+* Performance Effect: Placing the expensive, iterative calculations (items 2 and 3 above, which loop through all threads) inside
+    the interrupt handler is detrimental to performance. The primary goal of an interrupt handler is to be as fast as possible to
+    maintain system responsiveness. As the number of threads (N) in the system grows, the time spent with interrupts disabled will
+    increase linearly (O(N)). This increases interrupt latency, which means the system is slower to respond to other important
+    hardware events (like network packets or disk I/O). This can lead to missed events and poor overall performance.
+
+A more performant design would minimize the work done in the interrupt handler. The handler could do the bare minimum (e.g.,
+increment recent_cpu and set a flag that recalculation is needed) and delegate the expensive O(N) loops to a lower-priority
+kernel thread. This would keep interrupt latency low, at the minor cost of the priority updates being slightly less precisely
+timed. The current design prioritizes strict periodic updates over low interrupt latency.
+
+
 ---- RATIONALE ----
 
 >> C5: Briefly critique your design, pointing out advantages and
