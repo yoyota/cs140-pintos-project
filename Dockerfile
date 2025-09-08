@@ -1,9 +1,9 @@
 # This file is derived from https://github.com/YoungWilliamZ/Docker-for-Pintos/blob/master/Dockerfile
 FROM ubuntu:16.04
 
-ENV HOME /root
-ENV PATH /pintos/utils:$PATH
-ENV GDBMACROS $HOME/pintos/src/misc/gdb-macros
+ENV HOME=/root
+ENV PATH=/pintos/utils:$PATH
+ENV GDBMACROS=$HOME/pintos/src/misc/gdb-macros
 USER root
 WORKDIR ${HOME}
 
@@ -35,7 +35,7 @@ RUN wget https://bootstrap.pypa.io/pip/2.7/get-pip.py && \
     python get-pip.py && \
     pip install python-engineio==3.11.2 && \
     pip install python-socketio==4.4.0 && \
-    pip install gdbgui==0.12.0
+    pip install gdbgui==0.12.0 Brotli==1.0.9
 
 
 COPY ./Dockerfile /root
