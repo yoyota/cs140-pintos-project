@@ -30,19 +30,69 @@ FirstName LastName <email@domain.example>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+There were no new or changed structs, typedefs, or enumerations in the provided files. The main data structures used are:
+
+* static char *argv[] (in parse_args): A static array of character pointers used to store the arguments parsed from the
+    command-line string.
+* char *argv_address[] (in argument_passing): A local array of character pointers that holds the stack addresses of the arguments
+    to build the final argv array for the user process.
+
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe how you implemented argument parsing.  How do
 >> you arrange for the elements of argv[] to be in the right order?
 >> How do you avoid overflowing the stack page?
 
+1. Argument Parsing:
+    In process.c, within the function responsible for loading the user program, I first create a copy of the command-line string.
+To parse this string into arguments I iterate through the string, using spaces as delimiters, to
+identify each argument token and store the pointers to these tokens in a temporary array.
+
+2. Arranging `argv[]` in Order:
+    The x86 stack grows from high memory addresses to low memory addresses. To set up the stack correctly for main(int argc, char 
+*argv[]), I perform the following steps in reverse order:
+    * First, I push the actual string content of each argument onto the stack, from last to first. I record the stack address
+        where each string begins.
+    * To ensure proper alignment for the pointers that follow, I push padding bytes (nulls) to make the current stack pointer
+        word-aligned (a multiple of 4).
+    * Next, I push a null pointer sentinel (argv[argc]).
+    * Then, I push the addresses of the argument strings that I saved earlier, again from last to first. This creates the argv
+        array on the stack, with argv[0] pointing to the first argument, argv[1] to the second, and so on.
+    * Finally, I push the starting address of the argv array (which is the value for the argv parameter itself), the argument
+        count (argc), and a fake return address (typically 0).
+
+    By pushing the string data first and then the pointers in this right-to-left order, I ensure that when the program starts,
+argv points to a correctly ordered array of pointers, and those pointers correctly reference the argument strings.
+
+3. Avoiding Stack Page Overflow:
+    Before writing anything to the user's stack, I perform a crucial safety check. I calculate the total size required for all
+the argument strings, the argv pointers, the alignment padding, argc, and the fake return address. I then check if this total
+calculated size is greater than the available stack size (PGSIZE, typically 4KB). If it is, it signifies that the arguments
+cannot fit. In this case, I abort the process loading and have the exec system call return an error, preventing a kernel panic
+from a page fault.
+
+
 ---- RATIONALE ----
 
 >> A3: Why does Pintos implement strtok_r() but not strtok()?
 
+Pintos uses strtok_r() because it is a reentrant, thread-safe function. The standard strtok() is not thread-safe because it uses
+a static internal state to parse the string. In a multi-threaded environment like Pintos, using strtok() could lead to race
+conditions if multiple threads try to parse strings simultaneously. strtok_r() avoids this by requiring the caller to manage the
+state via a save pointer.
+
 >> A4: In Pintos, the kernel separates commands into a executable name
 >> and arguments.  In Unix-like systems, the shell does this
 >> separation.  Identify at least two advantages of the Unix approach.
+
+Two main advantages of the Unix approach are:
+
+1. Flexibility: The shell can implement powerful features like I/O redirection (>), pipes (|), and wildcard expansion (*) before the
+    program is executed. This keeps the kernel's interface simple and clean.
+2. Simplicity: The kernel's responsibility is reduced. It only needs to create a process and provide it with an array of arguments,
+    rather than needing to contain complex command-line parsing logic. This aligns with the Unix philosophy of small, focused tools.
+
 
                  SYSTEM CALLS
                  ============
