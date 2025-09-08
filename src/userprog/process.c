@@ -20,7 +20,7 @@
 
 static thread_func start_process NO_RETURN;
 static bool load(char *cmdline, void (**eip)(void), void **esp);
-void argument_passing(char **, void **);
+static bool argument_passing(char **argv, void **esp);
 char **parse_args(char *);
 
 /* Starts a new thread running a user program loaded from
@@ -301,7 +301,9 @@ bool load(char *cmdline, void (**eip)(void), void **esp)
 	if (!setup_stack(esp))
 		goto done;
 
-	argument_passing(argv, esp);
+	/* Pass arguments to the stack and check for overflow */
+	if (!argument_passing(argv, esp))
+		goto done;
 
 	/* Start address. */
 	*eip = (void (*)(void))ehdr.e_entry;
@@ -454,60 +456,72 @@ static bool setup_stack(void **esp)
 	return success;
 }
 
-void argument_passing(char **argv, void **esp_)
+static bool argument_passing(char **argv, void **esp)
 {
-	int i = 0;
-	char *a;
-	for (a = argv[0]; a != NULL; a = argv[i]) {
-		a = argv[++i];
+	int argc = 0;
+	while (argv[argc] != NULL) {
+		argc++;
 	}
-	int argc = i;
-	char **esp = (char **)esp_;
+
+	// Calculate the total space required for all arguments and metadata.
+	size_t string_space = 0;
+	for (int i = 0; i < argc; i++) {
+		string_space += strlen(argv[i]) + 1;
+	}
+
+	uintptr_t esp_after_strings = (uintptr_t)PHYS_BASE - string_space;
+	size_t align_padding = esp_after_strings % 4;
+
+	size_t total_size = string_space + align_padding +
+					(argc + 1) * sizeof(char *) + // argv[0]..[n-1], NULL
+					sizeof(char **) +			 // argv
+					sizeof(int) +					 // argc
+					sizeof(void *);				 // return address
+
+	// Perform the single, upfront check.
+	if (total_size > PGSIZE)
+		return false;
+
+	// --- If the check passes, push all data without further checks. ---
+
 	char *argv_address[argc];
 
-	// Place the words at the top of the stack.
-	for (i = argc - 1; i >= 0; i--) {
-		// +1 for null terminator
-		size_t l = strlen(argv[i]) + 1;
-		*esp -= sizeof(char) * l;
-		memcpy(*esp, argv[i], sizeof(char) * l);
+	// Place the argument strings on the stack.
+	for (int i = argc - 1; i >= 0; i--) {
+		size_t arg_len = strlen(argv[i]) + 1;
+		*esp -= arg_len;
+		memcpy(*esp, argv[i], arg_len);
 		argv_address[i] = *esp;
 	}
 
-	// word alignment
-	int word_align_count = (uintptr_t)*esp % 4;
-	for (i = 0; i < word_align_count; i++) {
-		*esp -= sizeof(uint8_t);
-		memset(*esp, 0, sizeof(uint8_t));
-	}
+	// Add alignment padding.
+	*esp -= align_padding;
+	memset(*esp, 0, align_padding);
 
-	// argv[argc] is a null pointer
-	size_t s = sizeof(argv[argc]);
-	*esp -= s;
-	memset(*esp, 0, s);
+	// Push the null pointer sentinel for argv.
+	*esp -= sizeof(char *);
+	memset(*esp, 0, sizeof(char *));
 
-	// push the address of each string
-	for (i = argc - 1; i >= 0; i--) {
+	// Push the addresses of the argument strings.
+	for (int i = argc - 1; i >= 0; i--) {
 		*esp -= sizeof(char *);
 		memcpy(*esp, &argv_address[i], sizeof(char *));
 	}
 
-	// push the address of argv[0]
+	// Push the address of argv itself.
 	char *argv_start_address = *esp;
 	*esp -= sizeof(char *);
 	memcpy(*esp, &argv_start_address, sizeof(char *));
 
-	// push argc
+	// Push argc.
 	*esp -= sizeof(int);
 	memcpy(*esp, &argc, sizeof(int));
 
-	// push fake return address
+	// Push the fake return address.
 	*esp -= sizeof(void *);
 	memset(*esp, 0, sizeof(void *));
 
-	// hex dump for debug
-	// hex_dump((uintptr_t)*esp, *esp, (uintptr_t)PHYS_BASE - (uintptr_t)*esp,
-	// 	 true);
+	return true;
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
