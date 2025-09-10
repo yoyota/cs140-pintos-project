@@ -89,9 +89,8 @@ static void start_process(void *cmdline)
    does nothing. */
 int process_wait(tid_t child_tid)
 {
-	struct thread *t = thread_get(child_tid);
-	while (t != NULL) {
-		t = thread_get(child_tid);
+	while (thread_get(child_tid) != NULL) {
+		thread_yield();
 	}
 	return -1;
 }
