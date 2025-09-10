@@ -1,5 +1,6 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
+#include <string.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
@@ -7,10 +8,12 @@
 #include "devices/shutdown.h"
 
 static void syscall_handler(struct intr_frame *);
-static void handle_halt();
+static void handle_halt(void);
 static void handle_write(struct intr_frame *);
 static void handle_exit(struct intr_frame *);
 static void exit(int);
+
+static size_t ptr_size = sizeof(void *);
 
 void syscall_init(void)
 {
@@ -43,12 +46,11 @@ static void handle_halt()
 static void handle_write(struct intr_frame *f)
 {
 	void *esp = f->esp;
-	size_t pointer_size = sizeof(void *);
-	esp += pointer_size;
+	esp += ptr_size;
 	int fd = *(int *)esp;
-	esp += pointer_size;
+	esp += ptr_size;
 	char *buf = *(char **)esp;
-	esp += pointer_size;
+	esp += ptr_size;
 	unsigned size = *(unsigned *)esp;
 	if (fd == STDOUT_FILENO) {
 		putbuf(buf, size);
@@ -58,13 +60,15 @@ static void handle_write(struct intr_frame *f)
 static void handle_exit(struct intr_frame *f)
 {
 	void *esp = f->esp;
-	esp += sizeof(int *);
+	esp += ptr_size;
 	int status_code = *(int *)esp;
 	exit(status_code);
 }
 
 static void exit(int status_code)
 {
-	printf("%s: exit(%d)\n", thread_name(), status_code);
+	char file_name[16];
+	strlcpy(file_name, thread_name(), strcspn(thread_name(), " ") + 1);
+	printf("%s: exit(%d)\n", file_name, status_code);
 	thread_exit();
 }

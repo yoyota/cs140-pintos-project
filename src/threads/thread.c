@@ -346,6 +346,19 @@ struct thread *thread_current(void)
 	return t;
 }
 
+struct thread *thread_get(tid_t tid)
+{
+	struct list_elem *e;
+	for (e = list_begin(&all_list); e != list_end(&all_list);
+	     e = list_next(e)) {
+		struct thread *t = list_entry(e, struct thread, allelem);
+		if (t->tid == tid) {
+			return t;
+		}
+	}
+	return NULL;
+}
+
 /* Returns the running thread's tid. */
 tid_t thread_tid(void)
 {
@@ -411,6 +424,7 @@ void thread_set_priority(int new_priority)
 	if (thread_mlfqs) {
 		return;
 	}
+	enum intr_level old_level = intr_disable();
 	struct thread *cur = running_thread();
 	int highest_holding_lock_priority =
 		thread_get_holding_lock_priority_max(cur);
@@ -424,6 +438,7 @@ void thread_set_priority(int new_priority)
 		}
 	}
 	cur->priority_before_donated = new_priority;
+	intr_set_level(old_level);
 }
 
 bool compare_lock_priority(const struct list_elem *a, const struct list_elem *b,

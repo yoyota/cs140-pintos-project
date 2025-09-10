@@ -104,8 +104,6 @@ char *strchr(const char *string, int c_)
 {
 	char c = c_;
 
-	ASSERT(string != NULL);
-
 	for (;;)
 		if (*string == c)
 			return (char *)string;
@@ -270,8 +268,6 @@ void *memset(void *dst_, int value, size_t size)
 size_t strlen(const char *string)
 {
 	const char *p;
-
-	ASSERT(string != NULL);
 
 	for (p = string; *p != '\0'; p++)
 		continue;
