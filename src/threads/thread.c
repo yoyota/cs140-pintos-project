@@ -588,6 +588,9 @@ static void init_thread(struct thread *t, const char *name, int priority)
 	t->nice = 0;
 	t->magic = THREAD_MAGIC;
 	list_init(&t->lock_list);
+	list_init(&t->children_list);
+	lock_init(&t->children_list_lock);
+	sema_init(&t->sema_wait, 0);
 	if (thread_mlfqs) {
 		priority_calculate(t, NULL);
 	} else {

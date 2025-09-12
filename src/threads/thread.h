@@ -93,6 +93,10 @@ struct thread {
 	struct list_elem allelem; /* List element for all threads list. */
 	struct list lock_list;
 	struct lock *lock_wait;
+	struct list children_list;
+	struct lock children_list_lock;
+	struct thread *parent_thread;
+	struct semaphore sema_wait;
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem; /* List element. */
 
