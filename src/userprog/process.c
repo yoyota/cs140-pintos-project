@@ -83,7 +83,7 @@ static void start_process(void *cmdline)
 	/* If load failed, quit. */
 	palloc_free_page(cmdline);
 	if (!success)
-		thread_exit();
+		thread_exit(-1);
 
 	/* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -104,6 +104,8 @@ static void start_process(void *cmdline)
 
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
+
+
 int process_wait(tid_t child_tid)
 {
 	struct thread *cur = thread_current();
@@ -134,7 +136,7 @@ int process_wait(tid_t child_tid)
 
 
 /* Free the current process's resources. */
-void process_exit(void)
+void process_exit(int status)
 {
 	struct thread *cur = thread_current();
 	uint32_t *pd;
@@ -154,7 +156,7 @@ void process_exit(void)
 		pagedir_activate(NULL);
 		pagedir_destroy(pd);
 	}
-	cur->thread_child_info->exit_code = 0;
+	cur->thread_child_info->exit_code = status;
 	sema_up(&cur->thread_child_info->sema_exit);
 }
 
