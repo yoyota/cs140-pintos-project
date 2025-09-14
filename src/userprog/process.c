@@ -39,8 +39,10 @@ tid_t process_execute(const char *cmdline)
 		return TID_ERROR;
 	strlcpy(fn_copy, cmdline, PGSIZE);
 
+	char *save_ptr;
+	char *file_name = strtok_r(cmdline, " ", &save_ptr);
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create(cmdline, PRI_DEFAULT + 1, start_process, fn_copy);
+	tid = thread_create(file_name, PRI_DEFAULT + 1, start_process, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page(fn_copy);
 	return tid;
@@ -87,9 +89,8 @@ static void start_process(void *cmdline)
    does nothing. */
 int process_wait(tid_t child_tid)
 {
-	struct thread *t = thread_get(child_tid);
-	while (t != NULL) {
-		t = thread_get(child_tid);
+	while (thread_get(child_tid) != NULL) {
+		thread_yield();
 	}
 	return -1;
 }
@@ -472,11 +473,12 @@ static bool argument_passing(char **argv, void **esp)
 	uintptr_t esp_after_strings = (uintptr_t)PHYS_BASE - string_space;
 	size_t align_padding = esp_after_strings % 4;
 
-	size_t total_size = string_space + align_padding +
-					(argc + 1) * sizeof(char *) + // argv[0]..[n-1], NULL
-					sizeof(char **) +			 // argv
-					sizeof(int) +					 // argc
-					sizeof(void *);				 // return address
+	size_t total_size =
+		string_space + align_padding +
+		(argc + 1) * sizeof(char *) + // argv[0]..[n-1], NULL
+		sizeof(char **) + // argv
+		sizeof(int) + // argc
+		sizeof(void *); // return address
 
 	// Perform the single, upfront check.
 	if (total_size > PGSIZE)

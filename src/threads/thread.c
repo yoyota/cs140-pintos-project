@@ -182,12 +182,14 @@ void recent_cpu_calculate(void)
 	int load_factor = ff_div(twiced_load, (twiced_load + 16384));
 
 	struct list_elem *e;
+	enum intr_level old_level = intr_disable();
 	for (e = list_begin(&all_list); e != list_end(&all_list);
 	     e = list_next(e)) {
 		struct thread *t = list_entry(e, struct thread, allelem);
 		t->recent_cpu =
 			ff_mul(load_factor, t->recent_cpu) + itof(t->nice);
 	}
+	intr_set_level(old_level);
 }
 
 void priority_calculate(struct thread *t, void *aux UNUSED)
@@ -349,14 +351,20 @@ struct thread *thread_current(void)
 struct thread *thread_get(tid_t tid)
 {
 	struct list_elem *e;
+	struct thread *found_thread = NULL;
+	enum intr_level old_level = intr_disable();
+
 	for (e = list_begin(&all_list); e != list_end(&all_list);
 	     e = list_next(e)) {
 		struct thread *t = list_entry(e, struct thread, allelem);
 		if (t->tid == tid) {
-			return t;
+			found_thread = t;
+			break;
 		}
 	}
-	return NULL;
+
+	intr_set_level(old_level);
+	return found_thread;
 }
 
 /* Returns the running thread's tid. */
@@ -567,6 +575,7 @@ static bool is_thread(struct thread *t)
    NAME. */
 static void init_thread(struct thread *t, const char *name, int priority)
 {
+	enum intr_level old_level;
 	ASSERT(t != NULL);
 	ASSERT(PRI_MIN <= priority && priority <= PRI_MAX);
 	ASSERT(name != NULL);
@@ -585,7 +594,9 @@ static void init_thread(struct thread *t, const char *name, int priority)
 		t->priority = priority;
 		t->priority_before_donated = priority;
 	}
+	old_level = intr_disable();
 	list_push_back(&all_list, &t->allelem);
+	intr_set_level(old_level);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
