@@ -91,14 +91,16 @@ struct thread {
 	int recent_cpu; /* Cpu time has received recently */
 	int nice;
 	struct list_elem allelem; /* List element for all threads list. */
-	struct list lock_list;
-	struct lock *lock_wait;
+
 	struct list children_list;
 	struct lock children_list_lock;
 	struct thread *parent_thread;
-	struct semaphore sema_wait;
+	struct child_info *thread_child_info;
+	struct semaphore sema_setup;
 	/* Shared between thread.c and synch.c. */
+	struct list lock_list;
 	struct list_elem elem; /* List element. */
+	struct lock *lock_wait;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
