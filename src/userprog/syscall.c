@@ -70,5 +70,5 @@ static void exit(int status_code)
 	char file_name[16];
 	strlcpy(file_name, thread_name(), strcspn(thread_name(), " ") + 1);
 	printf("%s: exit(%d)\n", file_name, status_code);
-	thread_exit();
+	thread_exit(status_code);
 }
