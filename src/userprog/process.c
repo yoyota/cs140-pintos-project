@@ -23,8 +23,7 @@
 static thread_func start_process NO_RETURN;
 static bool load(char *cmdline, void (**eip)(void), void **esp);
 static bool argument_passing(char **argv, void **esp);
-static struct child_info *process_get_child_info(tid_t child_tid,
-						 struct list *children_list);
+
 char **parse_args(char *);
 
 /* Starts a new thread running a user program loaded from
@@ -108,40 +107,31 @@ static void start_process(void *cmdline)
 int process_wait(tid_t child_tid)
 {
 	struct thread *cur = thread_current();
+	struct child_info *c_info = NULL;
+
 	lock_acquire(&cur->children_list_lock);
-	struct child_info *c_info =
-		process_get_child_info(child_tid, &cur->children_list);
-	if (c_info == NULL || c_info->is_done) {
-		lock_release(&cur->children_list_lock);
+	struct list_elem *e;
+	for (e = list_begin(&cur->children_list); e != list_end(&cur->children_list); e = list_next(e)) {
+		struct child_info *c = list_entry(e, struct child_info, children_elem);
+		if (c->tid == child_tid) {
+			c_info = c;
+			list_remove(&c_info->children_elem);
+			break;
+		}
+	}
+	lock_release(&cur->children_list_lock);
+
+	if (c_info == NULL) {
 		return -1;
 	}
-	c_info->is_done = true;
-	lock_release(&cur->children_list_lock);
 
 	sema_down(&c_info->sema_exit);
 	int exit_code = c_info->exit_code;
-	lock_acquire(&cur->children_list_lock);
-	list_remove(&c_info->children_elem);
-	lock_release(&cur->children_list_lock);
 	free(c_info);
 	return exit_code;
 }
 
-static struct child_info *process_get_child_info(tid_t child_tid,
-						 struct list *children_list)
-{
-	struct list_elem *e;
-	struct thread *cur = thread_current();
-	for (e = list_begin(children_list); e != list_end(children_list);
-	     e = list_next(e)) {
-		struct child_info *c =
-			list_entry(e, struct child_info, children_elem);
-		if (c->tid == child_tid) {
-			return c;
-		}
-	}
-	return NULL;
-}
+
 
 /* Free the current process's resources. */
 void process_exit(void)
