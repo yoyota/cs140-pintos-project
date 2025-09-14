@@ -13,3 +13,15 @@ $ ./scripts/docker_run.sh
 root@ac954084d33b:/pintos# cd utils/
 root@ac954084d33b:/pintos/utils# make
 ```
+
+## Test Example
+
+```sh
+make check TESTS='tests/userprog/args-none tests/userprog/args-single'
+```
+
+## Backtrace
+
+```sh
+backtrace build/kernel.o Call stack: 0xc0028e6f 0xc002101a
+```

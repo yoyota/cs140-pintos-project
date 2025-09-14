@@ -14,13 +14,17 @@
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
 static thread_func start_process NO_RETURN;
 static bool load(char *cmdline, void (**eip)(void), void **esp);
 static bool argument_passing(char **argv, void **esp);
+static struct child_info *process_get_child_info(tid_t child_tid,
+						 struct list *children_list);
 char **parse_args(char *);
 
 /* Starts a new thread running a user program loaded from
@@ -45,6 +49,19 @@ tid_t process_execute(const char *cmdline)
 	tid = thread_create(file_name, PRI_DEFAULT + 1, start_process, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page(fn_copy);
+	struct thread *child_thread = thread_get(tid);
+	struct child_info *c_info = malloc(sizeof *c_info);
+	c_info->tid = tid;
+	sema_init(&c_info->sema_exit, 0);
+	child_thread->thread_child_info = c_info;
+	if (child_thread != NULL) {
+		struct thread *cur = thread_current();
+		child_thread->parent_thread = cur;
+		lock_acquire(&cur->children_list_lock);
+		list_push_back(&cur->children_list, &c_info->children_elem);
+		lock_release(&cur->children_list_lock);
+		sema_up(&child_thread->sema_setup);
+	}
 	return tid;
 }
 
@@ -52,6 +69,7 @@ tid_t process_execute(const char *cmdline)
    running. */
 static void start_process(void *cmdline)
 {
+	sema_down(&thread_current()->sema_setup);
 	struct intr_frame if_;
 	bool success;
 
@@ -89,10 +107,40 @@ static void start_process(void *cmdline)
    does nothing. */
 int process_wait(tid_t child_tid)
 {
-	while (thread_get(child_tid) != NULL) {
-		thread_yield();
+	struct thread *cur = thread_current();
+	lock_acquire(&cur->children_list_lock);
+	struct child_info *c_info =
+		process_get_child_info(child_tid, &cur->children_list);
+	if (c_info == NULL || c_info->is_done) {
+		lock_release(&cur->children_list_lock);
+		return -1;
 	}
-	return -1;
+	c_info->is_done = true;
+	lock_release(&cur->children_list_lock);
+
+	sema_down(&c_info->sema_exit);
+	int exit_code = c_info->exit_code;
+	lock_acquire(&cur->children_list_lock);
+	list_remove(&c_info->children_elem);
+	lock_release(&cur->children_list_lock);
+	free(c_info);
+	return exit_code;
+}
+
+static struct child_info *process_get_child_info(tid_t child_tid,
+						 struct list *children_list)
+{
+	struct list_elem *e;
+	struct thread *cur = thread_current();
+	for (e = list_begin(children_list); e != list_end(children_list);
+	     e = list_next(e)) {
+		struct child_info *c =
+			list_entry(e, struct child_info, children_elem);
+		if (c->tid == child_tid) {
+			return c;
+		}
+	}
+	return NULL;
 }
 
 /* Free the current process's resources. */
@@ -116,6 +164,8 @@ void process_exit(void)
 		pagedir_activate(NULL);
 		pagedir_destroy(pd);
 	}
+	cur->thread_child_info->exit_code = 0;
+	sema_up(&cur->thread_child_info->sema_exit);
 }
 
 /* Sets up the CPU for running user code in the current
