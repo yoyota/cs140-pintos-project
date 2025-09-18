@@ -11,6 +11,7 @@ static void syscall_handler(struct intr_frame *);
 static void handle_halt(void);
 static void handle_write(struct intr_frame *);
 static void handle_exit(struct intr_frame *);
+static void handle_exec(struct intr_frame *);
 static void handle_wait(struct intr_frame *);
 static void exit(int);
 
@@ -36,6 +37,9 @@ static void syscall_handler(struct intr_frame *f)
 	case SYS_WAIT:
 		handle_wait(f);
 		break;
+	case SYS_EXEC:
+		handle_exec(f);
+		break;
 	case SYS_EXIT:
 		handle_exit(f);
 		break;
@@ -46,6 +50,17 @@ static void syscall_handler(struct intr_frame *f)
 static void handle_halt()
 {
 	shutdown_power_off();
+}
+
+static void handle_exec(struct intr_frame *f)
+{
+	void *esp = f->esp;
+	esp += ptr_size;
+	const char *cmdline = *(const char **)esp;
+
+	char kernel_cmdline[256];
+	strlcpy(kernel_cmdline, cmdline, PGSIZE);
+	f->eax = process_execute(kernel_cmdline);
 }
 
 static void handle_wait(struct intr_frame *f)
