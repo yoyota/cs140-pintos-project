@@ -1,4 +1,4 @@
-#include "userprog/syscall.h"
+#include "userprog/process.h"
 #include <stdio.h>
 #include <string.h>
 #include <syscall-nr.h>
@@ -11,6 +11,7 @@ static void syscall_handler(struct intr_frame *);
 static void handle_halt(void);
 static void handle_write(struct intr_frame *);
 static void handle_exit(struct intr_frame *);
+static void handle_wait(struct intr_frame *);
 static void exit(int);
 
 static size_t ptr_size = sizeof(void *);
@@ -24,12 +25,16 @@ static void syscall_handler(struct intr_frame *f)
 {
 	void *esp = f->esp;
 	int sys_call_number = *(uint8_t *)esp;
+
 	switch (sys_call_number) {
 	case SYS_HALT:
 		handle_halt();
 		break;
 	case SYS_WRITE:
 		handle_write(f);
+		break;
+	case SYS_WAIT:
+		handle_wait(f);
 		break;
 	case SYS_EXIT:
 		handle_exit(f);
@@ -41,6 +46,14 @@ static void syscall_handler(struct intr_frame *f)
 static void handle_halt()
 {
 	shutdown_power_off();
+}
+
+static void handle_wait(struct intr_frame *f)
+{
+	void *esp = f->esp;
+	esp += ptr_size;
+	pid_t pid = *(pid_t *)esp;
+	f->eax = process_wait(pid);
 }
 
 static void handle_write(struct intr_frame *f)

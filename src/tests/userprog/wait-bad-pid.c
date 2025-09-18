@@ -6,5 +6,5 @@
 
 void test_main(void)
 {
-	wait((pid_t)0x0c020301);
+	int a = wait((pid_t)0x0c020301);
 }

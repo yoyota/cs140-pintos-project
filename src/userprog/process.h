@@ -3,6 +3,8 @@
 
 #include "threads/thread.h"
 
+typedef int pid_t;
+
 struct child_info {
 	tid_t tid;
 	bool is_done;
