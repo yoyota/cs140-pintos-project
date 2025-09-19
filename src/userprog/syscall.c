@@ -6,6 +6,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "devices/shutdown.h"
+#include "userprog/pagedir.h"
 
 static void syscall_handler(struct intr_frame *);
 static void handle_halt(void);
@@ -14,6 +15,8 @@ static void handle_exit(struct intr_frame *);
 static void handle_exec(struct intr_frame *);
 static void handle_wait(struct intr_frame *);
 static void exit(int);
+static int get_user_int(const uint8_t *uaddr);
+static int get_user_byte(const uint8_t *uaddr);
 
 static size_t ptr_size = sizeof(void *);
 
@@ -59,7 +62,7 @@ static void handle_exec(struct intr_frame *f)
 	const char *cmdline = *(const char **)esp;
 
 	char kernel_cmdline[256];
-	strlcpy(kernel_cmdline, cmdline, PGSIZE);
+	strlcpy(kernel_cmdline, cmdline, 256);
 	f->eax = process_execute(kernel_cmdline);
 }
 
@@ -67,7 +70,7 @@ static void handle_wait(struct intr_frame *f)
 {
 	void *esp = f->esp;
 	esp += ptr_size;
-	pid_t pid = *(pid_t *)esp;
+	pid_t pid = get_user_int(esp);
 	f->eax = process_wait(pid);
 }
 
@@ -75,7 +78,7 @@ static void handle_write(struct intr_frame *f)
 {
 	void *esp = f->esp;
 	esp += ptr_size;
-	int fd = *(int *)esp;
+	int fd = get_user_int(esp);
 	esp += ptr_size;
 	char *buf = *(char **)esp;
 	esp += ptr_size;
@@ -99,4 +102,25 @@ static void exit(int status_code)
 	strlcpy(file_name, thread_name(), strcspn(thread_name(), " ") + 1);
 	printf("%s: exit(%d)\n", file_name, status_code);
 	thread_exit(status_code);
+}
+
+static int get_user_int(const uint8_t *uaddr)
+{
+	if (!is_user_vaddr(uaddr)) {
+		return -1;
+	}
+	int result;
+	asm("movl $1f, %0; movl %1, %0; 1:" : "=&a"(result) : "m"(*uaddr));
+	return result;
+}
+
+static int get_user_byte(const uint8_t *uaddr)
+{
+	if (!is_user_vaddr(uaddr)) {
+		return -1;
+	}
+	int result;
+	asm("movl $1f, %0; movzbl %1, %0; 1:" : "=&a"(result) : "m"(*uaddr));
+
+	return result;
 }
