@@ -59,10 +59,30 @@ static void handle_exec(struct intr_frame *f)
 {
 	void *esp = f->esp;
 	esp += ptr_size;
-	const char *cmdline = *(const char **)esp;
 
+	int cmdline_addr = get_user_int(esp);
+	if (cmdline_addr == -1) {
+		exit(-1);
+		return;
+	}
+	const char *cmdline = (const char *)cmdline_addr; // Cast to pointer
+
+	int i;
 	char kernel_cmdline[256];
-	strlcpy(kernel_cmdline, cmdline, 256);
+	for (i = 0; i < 255; i++) {
+		int copied = get_user_byte(cmdline + i);
+		if (copied == -1) {
+			exit(-1);
+			return;
+		}
+		char b = (char)copied;
+		if (b == '\0') {
+			kernel_cmdline[i] = b;
+			break;
+		}
+		kernel_cmdline[i] = b;
+	}
+	kernel_cmdline[i] = '\0';
 	f->eax = process_execute(kernel_cmdline);
 }
 
@@ -71,6 +91,9 @@ static void handle_wait(struct intr_frame *f)
 	void *esp = f->esp;
 	esp += ptr_size;
 	pid_t pid = get_user_int(esp);
+	if (pid == -1) {
+		exit(-1);
+	}
 	f->eax = process_wait(pid);
 }
 
