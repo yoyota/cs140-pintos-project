@@ -1,3 +1,4 @@
+#include "userprog/syscall.h"
 #include "userprog/process.h"
 #include <stdio.h>
 #include <string.h>
@@ -69,7 +70,7 @@ static void handle_exec(struct intr_frame *f)
 	int i;
 	char kernel_cmdline[256];
 	for (i = 0; i < 255; i++) {
-		int copied = get_user_byte(cmdline + i);
+		int copied = get_user_byte((const uint8_t *)(cmdline + i));
 		if (copied == -1) {
 			exit(-1);
 			return;
