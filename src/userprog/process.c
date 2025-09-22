@@ -32,22 +32,30 @@ char **parse_args(char *);
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t process_execute(const char *cmdline)
 {
-	char *fn_copy;
+	char *cmdline_copy;
 	tid_t tid;
 
-	/* Make a copy of FILE_NAME.
-     Otherwise there's a race between the caller and load(). */
-	fn_copy = palloc_get_page(0);
-	if (fn_copy == NULL)
+	cmdline_copy = palloc_get_page(0);
+	if (cmdline_copy == NULL)
 		return TID_ERROR;
-	strlcpy(fn_copy, cmdline, PGSIZE);
+	strlcpy(cmdline_copy, cmdline, PGSIZE);
 
-	char *save_ptr;
-	char *file_name = strtok_r(cmdline, " ", &save_ptr);
+	char *space_pos = strchr(cmdline_copy, ' ');
+	size_t name_len = space_pos ? (size_t)(space_pos - cmdline_copy + 1) :
+					    (strlen(cmdline_copy) + 1);
+	size_t filename_max = 256;
+	if (name_len > filename_max) {
+		name_len = filename_max;
+	}
+
+	char file_name_copy[name_len];
+	strlcpy(file_name_copy, cmdline_copy, name_len);
+
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create(file_name, PRI_DEFAULT + 1, start_process, fn_copy);
+	tid = thread_create(file_name_copy, PRI_DEFAULT + 1, start_process,
+			    cmdline_copy);
 	if (tid == TID_ERROR)
-		palloc_free_page(fn_copy);
+		palloc_free_page(cmdline_copy);
 	struct thread *child_thread = thread_get(tid);
 	struct child_info *c_info = malloc(sizeof *c_info);
 	c_info->tid = tid;
@@ -105,7 +113,6 @@ static void start_process(void *cmdline)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 
-
 int process_wait(tid_t child_tid)
 {
 	struct thread *cur = thread_current();
@@ -113,8 +120,10 @@ int process_wait(tid_t child_tid)
 
 	lock_acquire(&cur->children_list_lock);
 	struct list_elem *e;
-	for (e = list_begin(&cur->children_list); e != list_end(&cur->children_list); e = list_next(e)) {
-		struct child_info *c = list_entry(e, struct child_info, children_elem);
+	for (e = list_begin(&cur->children_list);
+	     e != list_end(&cur->children_list); e = list_next(e)) {
+		struct child_info *c =
+			list_entry(e, struct child_info, children_elem);
 		if (c->tid == child_tid) {
 			c_info = c;
 			list_remove(&c_info->children_elem);
@@ -132,8 +141,6 @@ int process_wait(tid_t child_tid)
 	free(c_info);
 	return exit_code;
 }
-
-
 
 /* Free the current process's resources. */
 void process_exit(int status)
