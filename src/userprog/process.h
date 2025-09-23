@@ -10,6 +10,7 @@ struct child_info {
 	bool is_done;
 	int exit_code;
 	struct semaphore sema_exit;
+	struct semaphore sema_load;
 	struct list_elem children_elem;
 };
 
