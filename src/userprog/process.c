@@ -31,50 +31,83 @@ char **parse_args(char *);
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
+static struct child_info *create_child_info(tid_t tid)
+{
+	struct child_info *c_info = malloc(sizeof(*c_info));
+	if (c_info == NULL)
+		return NULL;
+
+	c_info->tid = tid;
+	c_info->is_done = false;
+	c_info->exit_code = 0;
+	sema_init(&c_info->sema_exit, 0);
+	sema_init(&c_info->sema_load, 0);
+	return c_info;
+}
+
+static char *extract_file_name(const char *cmdline)
+{
+	const char *space_pos = strchr(cmdline, ' ');
+	size_t name_len = space_pos ? (size_t)(space_pos - cmdline) : strlen(cmdline);
+
+	const size_t filename_max = 255;
+	if (name_len > filename_max)
+		name_len = filename_max;
+
+	char *file_name = malloc(name_len + 1);
+	if (file_name == NULL)
+		return NULL;
+
+	strlcpy(file_name, cmdline, name_len + 1);
+	return file_name;
+}
+
 tid_t process_execute(const char *cmdline)
 {
-	char *cmdline_copy;
-	tid_t tid;
-
-	cmdline_copy = palloc_get_page(0);
+	char *cmdline_copy = palloc_get_page(0);
 	if (cmdline_copy == NULL)
 		return TID_ERROR;
 	strlcpy(cmdline_copy, cmdline, PGSIZE);
 
-	char *space_pos = strchr(cmdline_copy, ' ');
-	size_t name_len = space_pos ? (size_t)(space_pos - cmdline_copy + 1) :
-					    (strlen(cmdline_copy) + 1);
-
-	size_t filename_max = 256;
-	if (name_len > filename_max) {
-		name_len = filename_max;
-	}
-
-	char file_name_copy[name_len];
-	strlcpy(file_name_copy, cmdline_copy, name_len);
-
-	tid = thread_create(file_name_copy, PRI_DEFAULT + 1, start_process,
-			    cmdline_copy);
-	if (tid == TID_ERROR)
+	char *file_name = extract_file_name(cmdline);
+	if (file_name == NULL) {
 		palloc_free_page(cmdline_copy);
-	struct thread *child_thread = thread_get(tid);
-	struct child_info *c_info = malloc(sizeof *c_info);
-	c_info->tid = tid;
-	sema_init(&c_info->sema_exit, 0);
-	sema_init(&c_info->sema_load, 0);
-	child_thread->thread_child_info = c_info;
-	if (child_thread != NULL) {
-		struct thread *cur = thread_current();
-		child_thread->parent_thread = cur;
-		lock_acquire(&cur->children_list_lock);
-		list_push_back(&cur->children_list, &c_info->children_elem);
-		lock_release(&cur->children_list_lock);
-		sema_up(&child_thread->sema_setup);
-		sema_down(&c_info->sema_load);
-		if (c_info->exit_code == -1) {
-			return -1;
-		}
+		return TID_ERROR;
 	}
+
+	tid_t tid = thread_create(file_name, PRI_DEFAULT + 1, start_process, cmdline_copy);
+	free(file_name);
+
+	if (tid == TID_ERROR) {
+		palloc_free_page(cmdline_copy);
+		return TID_ERROR;
+	}
+
+	struct thread *child_thread = thread_get(tid);
+	if (child_thread == NULL) {
+		return TID_ERROR;
+	}
+
+	struct child_info *c_info = create_child_info(tid);
+	if (c_info == NULL) {
+		return TID_ERROR;
+	}
+
+	child_thread->thread_child_info = c_info;
+	child_thread->parent_thread = thread_current();
+
+	struct thread *cur = thread_current();
+	lock_acquire(&cur->children_list_lock);
+	list_push_back(&cur->children_list, &c_info->children_elem);
+	lock_release(&cur->children_list_lock);
+
+	sema_up(&child_thread->sema_setup);
+	sema_down(&c_info->sema_load);
+
+	if (c_info->exit_code == -1) {
+		return -1;
+	}
+
 	return tid;
 }
 
@@ -82,31 +115,24 @@ tid_t process_execute(const char *cmdline)
    running. */
 static void start_process(void *cmdline)
 {
-	sema_down(&thread_current()->sema_setup);
-	struct intr_frame if_;
-	bool success;
+	struct thread *cur = thread_current();
+	sema_down(&cur->sema_setup);
 
-	/* Initialize interrupt frame and load executable. */
-	memset(&if_, 0, sizeof if_);
+	struct intr_frame if_;
+	memset(&if_, 0, sizeof(if_));
 	if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
 	if_.cs = SEL_UCSEG;
 	if_.eflags = FLAG_IF | FLAG_MBS;
 
-	success = load(cmdline, &if_.eip, &if_.esp);
+	bool success = load(cmdline, &if_.eip, &if_.esp);
 	palloc_free_page(cmdline);
 
-	/* If load failed, quit. */
 	if (!success) {
 		exit(-1);
 	}
-	sema_up(&thread_current()->thread_child_info->sema_load);
 
-	/* Start the user process by simulating a return from an
-     interrupt, implemented by intr_exit (in
-     threads/intr-stubs.S).  Because intr_exit takes all of its
-     arguments on the stack in the form of a `struct intr_frame',
-     we just point the stack pointer (%esp) to our stack frame
-     and jump to it. */
+	sema_up(&cur->thread_child_info->sema_load);
+
 	asm volatile("movl %0, %%esp; jmp intr_exit" : : "g"(&if_) : "memory");
 	NOT_REACHED();
 }
@@ -154,27 +180,20 @@ int process_wait(tid_t child_tid)
 void process_exit(int status)
 {
 	struct thread *cur = thread_current();
-	uint32_t *pd;
+	uint32_t *pd = cur->pagedir;
 
-	/* Destroy the current process's page directory and switch back
-     to the kernel-only page directory. */
-	pd = cur->pagedir;
 	if (pd != NULL) {
-		/* Correct ordering here is crucial.  We must set
-         cur->pagedir to NULL before switching page directories,
-         so that a timer interrupt can't switch back to the
-         process page directory.  We must activate the base page
-         directory before destroying the process's page
-         directory, or our active page directory will be one
-         that's been freed (and cleared). */
 		cur->pagedir = NULL;
 		pagedir_activate(NULL);
 		pagedir_destroy(pd);
 	}
-	cur->thread_child_info->exit_code = status;
-	cur->thread_child_info->is_done = true;
-	sema_up(&cur->thread_child_info->sema_exit);
-	sema_up(&cur->thread_child_info->sema_load);
+
+	if (cur->thread_child_info != NULL) {
+		cur->thread_child_info->exit_code = status;
+		cur->thread_child_info->is_done = true;
+		sema_up(&cur->thread_child_info->sema_exit);
+		sema_up(&cur->thread_child_info->sema_load);
+	}
 }
 
 /* Sets up the CPU for running user code in the current
