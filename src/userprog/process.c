@@ -1,4 +1,5 @@
 #include "userprog/process.h"
+#include "userprog/syscall.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -43,6 +44,7 @@ tid_t process_execute(const char *cmdline)
 	char *space_pos = strchr(cmdline_copy, ' ');
 	size_t name_len = space_pos ? (size_t)(space_pos - cmdline_copy + 1) :
 					    (strlen(cmdline_copy) + 1);
+
 	size_t filename_max = 256;
 	if (name_len > filename_max) {
 		name_len = filename_max;
@@ -51,7 +53,6 @@ tid_t process_execute(const char *cmdline)
 	char file_name_copy[name_len];
 	strlcpy(file_name_copy, cmdline_copy, name_len);
 
-	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create(file_name_copy, PRI_DEFAULT + 1, start_process,
 			    cmdline_copy);
 	if (tid == TID_ERROR)
@@ -60,6 +61,7 @@ tid_t process_execute(const char *cmdline)
 	struct child_info *c_info = malloc(sizeof *c_info);
 	c_info->tid = tid;
 	sema_init(&c_info->sema_exit, 0);
+	sema_init(&c_info->sema_load, 0);
 	child_thread->thread_child_info = c_info;
 	if (child_thread != NULL) {
 		struct thread *cur = thread_current();
@@ -68,6 +70,10 @@ tid_t process_execute(const char *cmdline)
 		list_push_back(&cur->children_list, &c_info->children_elem);
 		lock_release(&cur->children_list_lock);
 		sema_up(&child_thread->sema_setup);
+		sema_down(&c_info->sema_load);
+		if (c_info->exit_code == -1) {
+			return -1;
+		}
 	}
 	return tid;
 }
@@ -87,11 +93,13 @@ static void start_process(void *cmdline)
 	if_.eflags = FLAG_IF | FLAG_MBS;
 
 	success = load(cmdline, &if_.eip, &if_.esp);
+	palloc_free_page(cmdline);
 
 	/* If load failed, quit. */
-	palloc_free_page(cmdline);
-	if (!success)
-		thread_exit(-1);
+	if (!success) {
+		exit(-1);
+	}
+	sema_up(&thread_current()->thread_child_info->sema_load);
 
 	/* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -164,7 +172,9 @@ void process_exit(int status)
 		pagedir_destroy(pd);
 	}
 	cur->thread_child_info->exit_code = status;
+	cur->thread_child_info->is_done = true;
 	sema_up(&cur->thread_child_info->sema_exit);
+	sema_up(&cur->thread_child_info->sema_load);
 }
 
 /* Sets up the CPU for running user code in the current

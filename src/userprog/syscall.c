@@ -15,7 +15,6 @@ static void handle_write(struct intr_frame *);
 static void handle_exit(struct intr_frame *);
 static void handle_exec(struct intr_frame *);
 static void handle_wait(struct intr_frame *);
-static void exit(int);
 static int get_user_int(const uint8_t *uaddr);
 static int get_user_byte(const uint8_t *uaddr);
 static int get_next_user_int(void **esp);
@@ -83,7 +82,8 @@ static void handle_exec(struct intr_frame *f)
 		kernel_cmdline[i] = b;
 	}
 	kernel_cmdline[i] = '\0';
-	f->eax = process_execute(kernel_cmdline);
+	tid_t tid = process_execute(kernel_cmdline);
+	f->eax = tid;
 }
 
 static void handle_wait(struct intr_frame *f)
@@ -113,7 +113,7 @@ static void handle_exit(struct intr_frame *f)
 	exit(status_code);
 }
 
-static void exit(int status_code)
+void exit(int status_code)
 {
 	char file_name[16];
 	strlcpy(file_name, thread_name(), strcspn(thread_name(), " ") + 1);
