@@ -1,5 +1,6 @@
 #include "userprog/syscall.h"
 #include "userprog/process.h"
+#include "userprog/pagedir.h"
 #include <stdio.h>
 #include <string.h>
 #include <syscall-nr.h>
@@ -7,7 +8,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "devices/shutdown.h"
-#include "userprog/pagedir.h"
+#include "filesys/filesys.h"
 
 static void syscall_handler(struct intr_frame *);
 static void handle_halt(void);
@@ -15,6 +16,7 @@ static void handle_write(struct intr_frame *);
 static void handle_exit(struct intr_frame *);
 static void handle_exec(struct intr_frame *);
 static void handle_wait(struct intr_frame *);
+static void handle_create(struct intr_frame *);
 static int get_user_int(const uint8_t *uaddr);
 static int get_user_byte(const uint8_t *uaddr);
 static int get_next_user_int(void **esp);
@@ -39,6 +41,9 @@ static void syscall_handler(struct intr_frame *f)
 	case SYS_HALT:
 		handle_halt();
 		break;
+	case SYS_CREATE:
+		handle_create(f);
+		break;
 	case SYS_WRITE:
 		handle_write(f);
 		break;
@@ -58,6 +63,32 @@ static void syscall_handler(struct intr_frame *f)
 static void handle_halt()
 {
 	shutdown_power_off();
+}
+
+static void handle_create(struct intr_frame *f)
+{
+	void *esp = f->esp;
+	int filename_addr = get_next_user_int(&esp);
+	const char *filename = (const char *)filename_addr;
+
+	int i;
+	char kernel_filename[256];
+	for (i = 0; i < 255; i++) {
+		int copied = get_user_byte((const uint8_t *)(filename + i));
+		if (copied == -1) {
+			exit(-1);
+			return;
+		}
+		char b = (char)copied;
+		if (b == '\0') {
+			kernel_filename[i] = b;
+			break;
+		}
+		kernel_filename[i] = b;
+	}
+	kernel_filename[i] = '\0';
+	unsigned initial_size = (unsigned)get_next_user_int(&esp);
+	f->eax = filesys_create(kernel_filename, initial_size);
 }
 
 static void handle_exec(struct intr_frame *f)
