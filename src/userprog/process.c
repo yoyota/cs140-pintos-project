@@ -45,21 +45,16 @@ static struct child_info *create_child_info(tid_t tid)
 	return c_info;
 }
 
-static char *extract_file_name(const char *cmdline)
+static void extract_file_name(const char *cmdline, char *file_name, size_t buffer_size)
 {
 	const char *space_pos = strchr(cmdline, ' ');
 	size_t name_len = space_pos ? (size_t)(space_pos - cmdline) : strlen(cmdline);
 
-	const size_t filename_max = 255;
+	const size_t filename_max = buffer_size - 1;
 	if (name_len > filename_max)
 		name_len = filename_max;
 
-	char *file_name = malloc(name_len + 1);
-	if (file_name == NULL)
-		return NULL;
-
 	strlcpy(file_name, cmdline, name_len + 1);
-	return file_name;
 }
 
 tid_t process_execute(const char *cmdline)
@@ -69,14 +64,10 @@ tid_t process_execute(const char *cmdline)
 		return TID_ERROR;
 	strlcpy(cmdline_copy, cmdline, PGSIZE);
 
-	char *file_name = extract_file_name(cmdline);
-	if (file_name == NULL) {
-		palloc_free_page(cmdline_copy);
-		return TID_ERROR;
-	}
+	char file_name[256];
+	extract_file_name(cmdline, file_name, sizeof(file_name));
 
 	tid_t tid = thread_create(file_name, PRI_DEFAULT + 1, start_process, cmdline_copy);
-	free(file_name);
 
 	if (tid == TID_ERROR) {
 		palloc_free_page(cmdline_copy);
