@@ -27,10 +27,6 @@ static bool argument_passing(char **argv, void **esp);
 
 char **parse_args(char *);
 
-/* Starts a new thread running a user program loaded from
-   FILENAME.  The new thread may be scheduled (and may even exit)
-   before process_execute() returns.  Returns the new process's
-   thread id, or TID_ERROR if the thread cannot be created. */
 static struct child_info *create_child_info(tid_t tid)
 {
 	struct child_info *c_info = malloc(sizeof(*c_info));
@@ -38,30 +34,31 @@ static struct child_info *create_child_info(tid_t tid)
 		return NULL;
 
 	c_info->tid = tid;
-	c_info->is_done = false;
+	c_info->is_load = false;
 	c_info->exit_code = 0;
 	sema_init(&c_info->sema_exit, 0);
 	sema_init(&c_info->sema_load, 0);
 	return c_info;
 }
 
-static char *extract_file_name(const char *cmdline)
+static void extract_file_name(const char *cmdline, char *file_name,
+			      size_t buffer_size)
 {
 	const char *space_pos = strchr(cmdline, ' ');
-	size_t name_len = space_pos ? (size_t)(space_pos - cmdline) : strlen(cmdline);
+	size_t name_len =
+		space_pos ? (size_t)(space_pos - cmdline) : strlen(cmdline);
 
-	const size_t filename_max = 255;
+	const size_t filename_max = buffer_size - 1;
 	if (name_len > filename_max)
 		name_len = filename_max;
 
-	char *file_name = malloc(name_len + 1);
-	if (file_name == NULL)
-		return NULL;
-
 	strlcpy(file_name, cmdline, name_len + 1);
-	return file_name;
 }
 
+/* Starts a new thread running a user program loaded from
+   FILENAME.  The new thread may be scheduled (and may even exit)
+   before process_execute() returns.  Returns the new process's
+   thread id, or TID_ERROR if the thread cannot be created. */
 tid_t process_execute(const char *cmdline)
 {
 	char *cmdline_copy = palloc_get_page(0);
@@ -69,14 +66,11 @@ tid_t process_execute(const char *cmdline)
 		return TID_ERROR;
 	strlcpy(cmdline_copy, cmdline, PGSIZE);
 
-	char *file_name = extract_file_name(cmdline);
-	if (file_name == NULL) {
-		palloc_free_page(cmdline_copy);
-		return TID_ERROR;
-	}
+	char file_name[256];
+	extract_file_name(cmdline, file_name, sizeof(file_name));
 
-	tid_t tid = thread_create(file_name, PRI_DEFAULT + 1, start_process, cmdline_copy);
-	free(file_name);
+	tid_t tid = thread_create(file_name, PRI_DEFAULT + 1, start_process,
+				  cmdline_copy);
 
 	if (tid == TID_ERROR) {
 		palloc_free_page(cmdline_copy);
@@ -104,7 +98,7 @@ tid_t process_execute(const char *cmdline)
 	sema_up(&child_thread->sema_setup);
 	sema_down(&c_info->sema_load);
 
-	if (c_info->exit_code == -1) {
+	if (!c_info->is_load) {
 		return -1;
 	}
 
@@ -131,6 +125,7 @@ static void start_process(void *cmdline)
 		exit(-1);
 	}
 
+	cur->thread_child_info->is_load = true;
 	sema_up(&cur->thread_child_info->sema_load);
 
 	asm volatile("movl %0, %%esp; jmp intr_exit" : : "g"(&if_) : "memory");
@@ -169,7 +164,6 @@ int process_wait(tid_t child_tid)
 	if (c_info == NULL) {
 		return -1;
 	}
-
 	sema_down(&c_info->sema_exit);
 	int exit_code = c_info->exit_code;
 	free(c_info);
@@ -190,7 +184,6 @@ void process_exit(int status)
 
 	if (cur->thread_child_info != NULL) {
 		cur->thread_child_info->exit_code = status;
-		cur->thread_child_info->is_done = true;
 		sema_up(&cur->thread_child_info->sema_exit);
 		sema_up(&cur->thread_child_info->sema_load);
 	}

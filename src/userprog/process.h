@@ -7,7 +7,7 @@ typedef int pid_t;
 
 struct child_info {
 	tid_t tid;
-	bool is_done;
+	bool is_load;
 	int exit_code;
 	struct semaphore sema_exit;
 	struct semaphore sema_load;
