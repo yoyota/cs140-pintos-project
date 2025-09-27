@@ -20,12 +20,16 @@
 #include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "userprog/userutil.h"
+
+#define CHILD_PRIORITY_BOOST 1
 
 static thread_func start_process NO_RETURN;
 static bool load(char *cmdline, void (**eip)(void), void **esp);
 static bool argument_passing(char **argv, void **esp);
 
 char **parse_args(char *);
+static bool setup_child_process(tid_t tid, struct child_info **c_info_out);
 
 static struct child_info *create_child_info(tid_t tid)
 {
@@ -55,6 +59,30 @@ static void extract_file_name(const char *cmdline, char *file_name,
 	strlcpy(file_name, cmdline, name_len + 1);
 }
 
+static bool setup_child_process(tid_t tid, struct child_info **c_info_out)
+{
+	struct thread *child_thread = thread_get(tid);
+	if (child_thread == NULL) {
+		return false;
+	}
+
+	struct child_info *c_info = create_child_info(tid);
+	if (c_info == NULL) {
+		return false;
+	}
+
+	child_thread->thread_child_info = c_info;
+	child_thread->parent_thread = thread_current();
+
+	struct thread *cur = thread_current();
+	lock_acquire(&cur->children_list_lock);
+	list_push_back(&cur->children_list, &c_info->children_elem);
+	lock_release(&cur->children_list_lock);
+
+	*c_info_out = c_info;
+	return true;
+}
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -66,10 +94,10 @@ tid_t process_execute(const char *cmdline)
 		return TID_ERROR;
 	strlcpy(cmdline_copy, cmdline, PGSIZE);
 
-	char file_name[256];
+	char file_name[MAX_FILENAME_LEN];
 	extract_file_name(cmdline, file_name, sizeof(file_name));
 
-	tid_t tid = thread_create(file_name, PRI_DEFAULT + 1, start_process,
+	tid_t tid = thread_create(file_name, PRI_DEFAULT + CHILD_PRIORITY_BOOST, start_process,
 				  cmdline_copy);
 
 	if (tid == TID_ERROR) {
@@ -77,24 +105,12 @@ tid_t process_execute(const char *cmdline)
 		return TID_ERROR;
 	}
 
+	struct child_info *c_info;
+	if (!setup_child_process(tid, &c_info)) {
+		return TID_ERROR;
+	}
+
 	struct thread *child_thread = thread_get(tid);
-	if (child_thread == NULL) {
-		return TID_ERROR;
-	}
-
-	struct child_info *c_info = create_child_info(tid);
-	if (c_info == NULL) {
-		return TID_ERROR;
-	}
-
-	child_thread->thread_child_info = c_info;
-	child_thread->parent_thread = thread_current();
-
-	struct thread *cur = thread_current();
-	lock_acquire(&cur->children_list_lock);
-	list_push_back(&cur->children_list, &c_info->children_elem);
-	lock_release(&cur->children_list_lock);
-
 	sema_up(&child_thread->sema_setup);
 	sema_down(&c_info->sema_load);
 

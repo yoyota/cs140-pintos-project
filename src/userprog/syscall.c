@@ -1,13 +1,16 @@
 #include "userprog/syscall.h"
 #include "userprog/process.h"
+#include "userprog/pagedir.h"
+#include "userprog/userutil.h"
 #include <stdio.h>
 #include <string.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 #include "devices/shutdown.h"
-#include "userprog/pagedir.h"
+#include "filesys/filesys.h"
 
 static void syscall_handler(struct intr_frame *);
 static void handle_halt(void);
@@ -15,15 +18,17 @@ static void handle_write(struct intr_frame *);
 static void handle_exit(struct intr_frame *);
 static void handle_exec(struct intr_frame *);
 static void handle_wait(struct intr_frame *);
-static int get_user_int(const uint8_t *uaddr);
-static int get_user_byte(const uint8_t *uaddr);
+static void handle_create(struct intr_frame *);
+static void handle_remove(struct intr_frame *);
 static int get_next_user_int(void **esp);
 
 static size_t ptr_size = sizeof(void *);
+static struct lock filesys_lock;
 
 void syscall_init(void)
 {
 	intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
+	lock_init(&filesys_lock);
 }
 
 static void syscall_handler(struct intr_frame *f)
@@ -38,6 +43,12 @@ static void syscall_handler(struct intr_frame *f)
 	switch (sys_call_number) {
 	case SYS_HALT:
 		handle_halt();
+		break;
+	case SYS_CREATE:
+		handle_create(f);
+		break;
+	case SYS_REMOVE:
+		handle_remove(f);
 		break;
 	case SYS_WRITE:
 		handle_write(f);
@@ -60,28 +71,60 @@ static void handle_halt()
 	shutdown_power_off();
 }
 
+static void handle_create(struct intr_frame *f)
+{
+	void *esp = f->esp;
+	int filename_addr = get_next_user_int(&esp);
+	const char *filename = (const char *)filename_addr;
+
+	char kernel_filename[MAX_FILENAME_LEN];
+	if (!copy_string_from_user(filename, kernel_filename,
+				   MAX_FILENAME_LEN)) {
+		exit(-1);
+		return;
+	}
+
+	unsigned initial_size = (unsigned)get_next_user_int(&esp);
+
+	lock_acquire(&filesys_lock);
+	bool success = filesys_create(kernel_filename, initial_size);
+	lock_release(&filesys_lock);
+
+	f->eax = success;
+}
+
+static void handle_remove(struct intr_frame *f)
+{
+	void *esp = f->esp;
+	int filename_addr = get_next_user_int(&esp);
+	const char *filename = (const char *)filename_addr;
+
+	char kernel_filename[MAX_FILENAME_LEN];
+	if (!copy_string_from_user(filename, kernel_filename,
+				   MAX_FILENAME_LEN)) {
+		exit(-1);
+		return;
+	}
+
+	lock_acquire(&filesys_lock);
+	bool success = filesys_remove(kernel_filename);
+	lock_release(&filesys_lock);
+
+	f->eax = success;
+}
+
 static void handle_exec(struct intr_frame *f)
 {
 	void *esp = f->esp;
 	int cmdline_addr = get_next_user_int(&esp);
 	const char *cmdline = (const char *)cmdline_addr;
 
-	int i;
-	char kernel_cmdline[256];
-	for (i = 0; i < 255; i++) {
-		int copied = get_user_byte((const uint8_t *)(cmdline + i));
-		if (copied == -1) {
-			exit(-1);
-			return;
-		}
-		char b = (char)copied;
-		if (b == '\0') {
-			kernel_cmdline[i] = b;
-			break;
-		}
-		kernel_cmdline[i] = b;
+	char kernel_cmdline[MAX_CMDLINE_LEN];
+	if (!copy_string_from_user(cmdline, kernel_cmdline, MAX_CMDLINE_LEN)) {
+		exit(-1);
+		return;
 	}
-	kernel_cmdline[i] = '\0';
+
 	tid_t tid = process_execute(kernel_cmdline);
 	f->eax = tid;
 }
@@ -115,7 +158,7 @@ static void handle_exit(struct intr_frame *f)
 
 void exit(int status_code)
 {
-	char file_name[16];
+	char file_name[PROCESS_NAME_LEN];
 	strlcpy(file_name, thread_name(), strcspn(thread_name(), " ") + 1);
 	printf("%s: exit(%d)\n", file_name, status_code);
 	thread_exit(status_code);
@@ -124,30 +167,9 @@ void exit(int status_code)
 static int get_next_user_int(void **esp)
 {
 	*esp += ptr_size;
-	int result = get_user_int(*esp);
+	int result = get_user_int((const uint8_t *)*esp);
 	if (result == -1) {
 		exit(-1);
 	}
-	return result;
-}
-
-static int get_user_int(const uint8_t *uaddr)
-{
-	if (!is_user_vaddr(uaddr)) {
-		return -1;
-	}
-	int result;
-	asm("movl $1f, %0; movl %1, %0; 1:" : "=&a"(result) : "m"(*uaddr));
-	return result;
-}
-
-static int get_user_byte(const uint8_t *uaddr)
-{
-	if (!is_user_vaddr(uaddr)) {
-		return -1;
-	}
-	int result;
-	asm("movl $1f, %0; movzbl %1, %0; 1:" : "=&a"(result) : "m"(*uaddr));
-
 	return result;
 }
