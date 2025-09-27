@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/synch.h"
+#include "filesys/file.h"
 
 /* States in a thread's life cycle. */
 enum thread_status {
@@ -23,6 +24,8 @@ typedef int tid_t;
 #define PRI_MIN 0 /* Lowest priority. */
 #define PRI_DEFAULT 31 /* Default priority. */
 #define PRI_MAX 63 /* Highest priority. */
+
+#define MAX_OPEN_FILES 128
 
 /* A kernel thread or user process.
 
@@ -105,6 +108,8 @@ struct thread {
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint32_t *pagedir; /* Page directory. */
+	struct file *fd_table[MAX_OPEN_FILES];
+	int next_fd;
 #endif
 
 	/* Owned by thread.c. */

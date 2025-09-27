@@ -20,6 +20,7 @@ static void handle_exec(struct intr_frame *);
 static void handle_wait(struct intr_frame *);
 static void handle_create(struct intr_frame *);
 static void handle_remove(struct intr_frame *);
+static void handle_open(struct intr_frame *);
 static int get_next_user_int(void **esp);
 
 static size_t ptr_size = sizeof(void *);
@@ -49,6 +50,9 @@ static void syscall_handler(struct intr_frame *f)
 		break;
 	case SYS_REMOVE:
 		handle_remove(f);
+		break;
+	case SYS_OPEN:
+		handle_open(f);
 		break;
 	case SYS_WRITE:
 		handle_write(f);
@@ -111,6 +115,34 @@ static void handle_remove(struct intr_frame *f)
 	lock_release(&filesys_lock);
 
 	f->eax = success;
+}
+
+static void handle_open(struct intr_frame *f)
+{
+	void *esp = f->esp;
+	int filename_addr = get_next_user_int(&esp);
+	const char *filename = (const char *)filename_addr;
+
+	char kernel_filename[MAX_FILENAME_LEN];
+	if (!copy_string_from_user(filename, kernel_filename,
+				   MAX_FILENAME_LEN)) {
+		exit(-1);
+		return;
+	}
+
+	lock_acquire(&filesys_lock);
+	struct file *file_opened = filesys_open(kernel_filename);
+	lock_release(&filesys_lock);
+
+	if (file_opened == NULL) {
+		f->eax = -1;
+		return;
+	}
+	struct thread *cur = thread_current();
+
+	cur->fd_table[cur->next_fd] = file_opened;
+	f->eax = cur->next_fd;
+	cur->next_fd += 1;
 }
 
 static void handle_exec(struct intr_frame *f)
