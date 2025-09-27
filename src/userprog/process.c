@@ -97,8 +97,8 @@ tid_t process_execute(const char *cmdline)
 	char file_name[MAX_FILENAME_LEN];
 	extract_file_name(cmdline, file_name, sizeof(file_name));
 
-	tid_t tid = thread_create(file_name, PRI_DEFAULT + CHILD_PRIORITY_BOOST, start_process,
-				  cmdline_copy);
+	tid_t tid = thread_create(file_name, PRI_DEFAULT + CHILD_PRIORITY_BOOST,
+				  start_process, cmdline_copy);
 
 	if (tid == TID_ERROR) {
 		palloc_free_page(cmdline_copy);
@@ -111,6 +111,9 @@ tid_t process_execute(const char *cmdline)
 	}
 
 	struct thread *child_thread = thread_get(tid);
+
+	child_thread->next_fd = 2;
+
 	sema_up(&child_thread->sema_setup);
 	sema_down(&c_info->sema_load);
 
