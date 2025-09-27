@@ -21,6 +21,7 @@ static void handle_wait(struct intr_frame *);
 static void handle_create(struct intr_frame *);
 static void handle_remove(struct intr_frame *);
 static void handle_open(struct intr_frame *);
+static void handle_close(struct intr_frame *);
 static int get_next_user_int(void **esp);
 
 static size_t ptr_size = sizeof(void *);
@@ -53,6 +54,9 @@ static void syscall_handler(struct intr_frame *f)
 		break;
 	case SYS_OPEN:
 		handle_open(f);
+		break;
+	case SYS_CLOSE:
+		handle_close(f);
 		break;
 	case SYS_WRITE:
 		handle_write(f);
@@ -143,6 +147,21 @@ static void handle_open(struct intr_frame *f)
 	cur->fd_table[cur->next_fd] = file_opened;
 	f->eax = cur->next_fd;
 	cur->next_fd += 1;
+}
+
+static void handle_close(struct intr_frame *f)
+{
+	void *esp = f->esp;
+	int fd = get_next_user_int(&esp);
+
+	if (fd > MAX_OPEN_FILES || fd < 2) {
+		return;
+	}
+
+	struct thread *cur = thread_current();
+	struct file *fd_file = cur->fd_table[fd];
+	file_close(fd_file);
+	cur->fd_table[fd] = NULL;
 }
 
 static void handle_exec(struct intr_frame *f)
