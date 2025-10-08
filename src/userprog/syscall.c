@@ -2,6 +2,7 @@
 #include "userprog/process.h"
 #include "userprog/pagedir.h"
 #include "userprog/userutil.h"
+#include "devices/input.h"
 #include <stdio.h>
 #include <string.h>
 #include <syscall-nr.h>
@@ -15,6 +16,7 @@
 static void syscall_handler(struct intr_frame *);
 static void handle_halt(void);
 static void handle_write(struct intr_frame *);
+static void handle_read(struct intr_frame *);
 static void handle_exit(struct intr_frame *);
 static void handle_exec(struct intr_frame *);
 static void handle_wait(struct intr_frame *);
@@ -60,6 +62,9 @@ static void syscall_handler(struct intr_frame *f)
 		break;
 	case SYS_WRITE:
 		handle_write(f);
+		break;
+	case SYS_READ:
+		handle_read(f);
 		break;
 	case SYS_WAIT:
 		handle_wait(f);
@@ -197,6 +202,32 @@ static void handle_write(struct intr_frame *f)
 
 	if (fd == STDOUT_FILENO) {
 		putbuf(buf, size);
+	}
+}
+
+static void handle_read(struct intr_frame *f)
+{
+	void *esp = f->esp;
+	int fd = get_next_user_int(&esp);
+	int buf_addr = get_next_user_int(&esp);
+	unsigned size = (unsigned)get_next_user_int(&esp);
+
+	if (fd == STDOUT_FILENO) {
+		f->eax = -1;
+		return;
+	}
+
+	if (fd == STDIN_FILENO) {
+		uint8_t *uint8_buf = (uint8_t *)buf_addr;
+		unsigned i = 0;
+		for (i = 0; i < size; i++) {
+			if (!put_user_byte(uint8_buf + i, input_getc())) {
+				f->eax = -1;
+				return;
+			}
+		}
+		f->eax = i;
+		return;
 	}
 }
 
