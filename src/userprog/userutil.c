@@ -39,3 +39,15 @@ bool copy_string_from_user(const char *src, char *dst, size_t max_len)
 	dst[max_len - 1] = '\0';
 	return true;
 }
+
+bool put_user_byte(uint8_t *udst, uint8_t byte)
+{
+	if (!is_user_vaddr(udst)) {
+		return false;
+	}
+	int error_code;
+	asm("movl $1f, %0; movb %b2, %1; 1:"
+	    : "=&a"(error_code), "=m"(*udst)
+	    : "q"(byte));
+	return error_code != -1;
+}

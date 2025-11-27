@@ -13,6 +13,7 @@
 /* User memory access functions */
 int get_user_byte(const uint8_t *uaddr);
 int get_user_int(const uint8_t *uaddr);
+bool put_user_byte(uint8_t *udst, uint8_t byte);
 bool copy_string_from_user(const char *src, char *dst, size_t max_len);
 
 #endif /* userprog/userutil.h */
